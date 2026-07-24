@@ -15,7 +15,7 @@ export default function Home() {
     { query: { refetchInterval: 5000 } }
   );
 
-  const displayMarkets = markets.length > 0 ? markets : mockMarkets[category];
+  const displayMarkets = Array.isArray(markets) && markets.length > 0 ? markets : mockMarkets[category];
 
   return (
     <MainLayout>
