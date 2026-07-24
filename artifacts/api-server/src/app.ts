@@ -1,5 +1,11 @@
 import express, { type Express } from "express";
-import cors from "cors";
+import cors from 'cors';
+
+app.use(cors({
+  origin: '*', // Or specify: ['https://novusmarketss.vercel.app']
+  credentials: true
+}));
+
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
