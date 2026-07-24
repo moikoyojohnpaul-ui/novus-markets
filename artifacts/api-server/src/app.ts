@@ -1,16 +1,17 @@
 import express, { type Express } from "express";
-import cors from 'cors';
-
-app.use(cors({
-  origin: '*', // Or specify: ['https://novusmarketss.vercel.app']
-  credentials: true
-}));
-
+import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+
+app.use(
+  cors({
+    origin: "*", // or: ['https://novusmarketss.vercel.app']
+    credentials: true,
+  })
+);
 
 app.use(
   pinoHttp({
@@ -29,9 +30,9 @@ app.use(
         };
       },
     },
-  }),
+  })
 );
-app.use(cors());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
