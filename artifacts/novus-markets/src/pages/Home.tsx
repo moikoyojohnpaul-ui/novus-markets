@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, Lock, Zap, Globe2 } from 'lucide-react';
+import { ArrowRight, BarChart3, Lock, Zap } from 'lucide-react';
 import { Link } from 'wouter';
 import { useGetMarkets } from '@workspace/api-client-react';
 import { Badge } from '@/components/ui/badge';
@@ -9,23 +9,18 @@ import { motion } from 'framer-motion';
 
 export default function Home() {
   const [category, setCategory] = useState<'forex' | 'crypto' | 'indices' | 'commodities'>('forex');
-  
-  const { data: markets = [] } = useGetMarkets({
-    category
-  }, {
-    query: {
-      refetchInterval: 5000
-    }
-  });
 
-  // Since we might not have backend data right away, let's use some fallback mock data
+  const { data: markets = [] } = useGetMarkets(
+    { category },
+    { query: { refetchInterval: 5000 } }
+  );
+
   const displayMarkets = markets.length > 0 ? markets : mockMarkets[category];
 
   return (
     <MainLayout>
       {/* Hero Section */}
       <section className="relative pt-24 pb-32 overflow-hidden">
-        {/* Abstract background blobs */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-[1200px] pointer-events-none -z-10">
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px]" />
           <div className="absolute bottom-[20%] right-[-10%] w-[30%] h-[30%] bg-blue-500/10 rounded-full blur-[100px]" />
@@ -41,10 +36,14 @@ export default function Home() {
               Institutional Grade Execution
             </Badge>
             <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight mb-8 max-w-4xl mx-auto leading-tight">
-              Where Precision Meets <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-500">Performance</span>
+              Where Precision Meets{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-500">
+                Performance
+              </span>
             </h1>
             <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-              Trade Forex, Crypto, and Indices on a platform engineered for serious traders. Zero fluff, ultra-low latency, and tight spreads.
+              Trade Forex, Crypto, and Indices on a platform engineered for serious traders.
+              Zero fluff, ultra-low latency, and tight spreads.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" className="w-full sm:w-auto text-lg h-14 px-8" asChild>
@@ -53,9 +52,7 @@ export default function Home() {
                 </Link>
               </Button>
               <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg h-14 px-8 glass-hover" asChild>
-                <Link href="/register?demo=true">
-                  Try Free Demo
-                </Link>
+                <Link href="/register?demo=true">Try Free Demo</Link>
               </Button>
             </div>
           </motion.div>
@@ -71,13 +68,13 @@ export default function Home() {
               <p className="text-muted-foreground">Real-time pricing from tier-1 liquidity providers.</p>
             </div>
             <div className="flex bg-background/50 p-1 rounded-lg border border-border backdrop-blur-md">
-              {(['forex', 'crypto', 'indices', 'commodities'] as const).map(c => (
+              {(['forex', 'crypto', 'indices', 'commodities'] as const).map((c) => (
                 <button
                   key={c}
                   onClick={() => setCategory(c)}
                   className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${
-                    category === c 
-                      ? 'bg-card text-foreground shadow-sm' 
+                    category === c
+                      ? 'bg-card text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-card/50'
                   }`}
                 >
@@ -102,24 +99,40 @@ export default function Home() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {displayMarkets.map((market, i) => (
-                    <motion.tr 
+                    <motion.tr
+                      key={market.symbol}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05 }}
-                      key={market.symbol} 
                       className="hover:bg-muted/20 transition-colors group"
                     >
                       <td className="px-6 py-4 font-semibold text-foreground flex items-center gap-2">
                         {market.symbol}
                       </td>
-                      <td className="px-6 py-4 text-right font-mono text-muted-foreground group-hover:text-foreground transition-colors">{market.bidPrice.toFixed(4)}</td>
-                      <td className="px-6 py-4 text-right font-mono text-muted-foreground group-hover:text-foreground transition-colors">{market.askPrice.toFixed(4)}</td>
-                      <td className="px-6 py-4 text-right font-mono text-muted-foreground">{market.spread.toFixed(1)}</td>
-                      <td className={`px-6 py-4 text-right font-medium ${market.change24h >= 0 ? 'text-success' : 'text-destructive'}`}>
-                        {market.change24h > 0 ? '+' : ''}{market.change24h.toFixed(2)}%
+                      <td className="px-6 py-4 text-right font-mono text-muted-foreground group-hover:text-foreground transition-colors">
+                        {Number(market.bidPrice).toFixed(4)}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-muted-foreground group-hover:text-foreground transition-colors">
+                        {Number(market.askPrice).toFixed(4)}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-muted-foreground">
+                        {Number(market.spread).toFixed(1)}
+                      </td>
+                      <td
+                        className={`px-6 py-4 text-right font-medium ${
+                          Number(market.change24h) >= 0 ? 'text-success' : 'text-destructive'
+                        }`}
+                      >
+                        {Number(market.change24h) > 0 ? '+' : ''}
+                        {Number(market.change24h).toFixed(2)}%
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button size="sm" variant="ghost" className="h-8 hover:bg-primary hover:text-primary-foreground" asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 hover:bg-primary hover:text-primary-foreground"
+                          asChild
+                        >
                           <Link href={`/dashboard?symbol=${market.symbol}`}>Trade</Link>
                         </Button>
                       </td>
@@ -149,10 +162,11 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold mb-3">Ultra-Low Latency</h3>
               <p className="text-muted-foreground leading-relaxed">
-                Orders executed in under 12ms. Direct cross-connects to tier-1 liquidity pools ensure you get the price you see.
+                Orders executed in under 12ms. Direct cross-connects to tier-1 liquidity pools ensure
+                you get the price you see.
               </p>
             </div>
-            
+
             <div className="glass p-8 rounded-2xl glass-hover relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-bl-full" />
               <div className="w-14 h-14 bg-blue-500/10 rounded-xl flex items-center justify-center mb-6 text-blue-500">
@@ -160,7 +174,8 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold mb-3">Advanced Charting</h3>
               <p className="text-muted-foreground leading-relaxed">
-                Institutional grade charting tools. 100+ indicators, custom timeframes, and seamless order placement from the chart.
+                Institutional grade charting tools. 100+ indicators, custom timeframes, and seamless
+                order placement from the chart.
               </p>
             </div>
 
@@ -170,13 +185,14 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold mb-3">Bank-Grade Security</h3>
               <p className="text-muted-foreground leading-relaxed">
-                Cold storage for crypto assets, segregated accounts for fiat, and strict regulatory compliance protect your capital.
+                Cold storage for crypto assets, segregated accounts for fiat, and strict regulatory
+                compliance protect your capital.
               </p>
             </div>
           </div>
         </div>
       </section>
-      
+
       {/* CTA Section */}
       <section className="py-32 relative overflow-hidden bg-card/50">
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=2070&auto=format&fit=crop')] opacity-5 mix-blend-overlay bg-cover bg-center" />
@@ -197,23 +213,23 @@ export default function Home() {
 const mockMarkets = {
   forex: [
     { symbol: 'EUR/USD', bidPrice: 1.09241, askPrice: 1.09243, spread: 0.2, change24h: 0.15 },
-    { symbol: 'GBP/USD', bidPrice: 1.26450, askPrice: 1.26453, spread: 0.3, change24h: -0.21 },
-    { symbol: 'USD/JPY', bidPrice: 150.120, askPrice: 150.124, spread: 0.4, change24h: 0.45 },
-    { symbol: 'AUD/USD', bidPrice: 0.65210, askPrice: 0.65214, spread: 0.4, change24h: -0.10 },
+    { symbol: 'GBP/USD', bidPrice: 1.2645, askPrice: 1.26453, spread: 0.3, change24h: -0.21 },
+    { symbol: 'USD/JPY', bidPrice: 150.12, askPrice: 150.124, spread: 0.4, change24h: 0.45 },
+    { symbol: 'AUD/USD', bidPrice: 0.6521, askPrice: 0.65214, spread: 0.4, change24h: -0.1 },
   ],
   crypto: [
-    { symbol: 'BTC/USD', bidPrice: 64230.50, askPrice: 64231.00, spread: 0.5, change24h: 2.4 },
-    { symbol: 'ETH/USD', bidPrice: 3450.20, askPrice: 3450.40, spread: 0.2, change24h: 1.2 },
-    { symbol: 'SOL/USD', bidPrice: 145.60, askPrice: 145.65, spread: 0.05, change24h: 5.4 },
+    { symbol: 'BTC/USD', bidPrice: 64230.5, askPrice: 64231.0, spread: 0.5, change24h: 2.4 },
+    { symbol: 'ETH/USD', bidPrice: 3450.2, askPrice: 3450.4, spread: 0.2, change24h: 1.2 },
+    { symbol: 'SOL/USD', bidPrice: 145.6, askPrice: 145.65, spread: 0.05, change24h: 5.4 },
   ],
   indices: [
-    { symbol: 'US500', bidPrice: 5120.40, askPrice: 5120.80, spread: 0.4, change24h: 0.8 },
-    { symbol: 'UT100', bidPrice: 18230.40, askPrice: 18231.20, spread: 0.8, change24h: 1.1 },
-    { symbol: 'DE40', bidPrice: 17800.50, askPrice: 17801.50, spread: 1.0, change24h: -0.3 },
+    { symbol: 'US500', bidPrice: 5120.4, askPrice: 5120.8, spread: 0.4, change24h: 0.8 },
+    { symbol: 'UT100', bidPrice: 18230.4, askPrice: 18231.2, spread: 0.8, change24h: 1.1 },
+    { symbol: 'DE40', bidPrice: 17800.5, askPrice: 17801.5, spread: 1.0, change24h: -0.3 },
   ],
   commodities: [
-    { symbol: 'XAU/USD', bidPrice: 2340.10, askPrice: 2340.40, spread: 0.3, change24h: -0.8 },
-    { symbol: 'XAG/USD', bidPrice: 28.450, askPrice: 28.470, spread: 0.02, change24h: 0.5 },
-    { symbol: 'WTI/USD', bidPrice: 82.40, askPrice: 82.43, spread: 0.03, change24h: 1.5 },
-  ]
+    { symbol: 'XAU/USD', bidPrice: 2340.1, askPrice: 2340.4, spread: 0.3, change24h: -0.8 },
+    { symbol: 'XAG/USD', bidPrice: 28.45, askPrice: 28.47, spread: 0.02, change24h: 0.5 },
+    { symbol: 'WTI/USD', bidPrice: 82.4, askPrice: 82.43, spread: 0.03, change24h: 1.5 },
+  ],
 };
