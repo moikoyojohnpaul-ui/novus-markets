@@ -1,22 +1,39 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Novus Markets Trading Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: accounts
+    description: Trading accounts
+  - name: markets
+    description: Market data
+  - name: trades
+    description: Trade execution
+  - name: deposits
+    description: Deposits and withdrawals
+  - name: users
+    description: User management
+  - name: admin
+    description: Admin operations
+  - name: notifications
+    description: Notifications
+  - name: settings
+    description: Platform settings
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +41,1284 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+
+  # ── Users ──────────────────────────────────────────────────────────────────
+  /users/profile:
+    patch:
+      operationId: updateProfile
+      tags: [users]
+      summary: Update user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/kyc:
+    get:
+      operationId: getKycStatus
+      tags: [users]
+      summary: Get KYC status
+      responses:
+        "200":
+          description: KYC status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStatus"
+    post:
+      operationId: submitKyc
+      tags: [users]
+      summary: Submit KYC documents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KycInput"
+      responses:
+        "200":
+          description: KYC submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStatus"
+
+  /users/sessions:
+    get:
+      operationId: getSessions
+      tags: [users]
+      summary: Get active sessions
+      responses:
+        "200":
+          description: Sessions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+
+  /users/change-password:
+    post:
+      operationId: changePassword
+      tags: [users]
+      summary: Change password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /users/2fa:
+    patch:
+      operationId: toggle2fa
+      tags: [users]
+      summary: Toggle 2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Toggle2faInput"
+      responses:
+        "200":
+          description: 2FA toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Accounts ───────────────────────────────────────────────────────────────
+  /accounts:
+    get:
+      operationId: getAccounts
+      tags: [accounts]
+      summary: Get user trading accounts
+      responses:
+        "200":
+          description: Accounts list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Account"
+
+  /accounts/summary:
+    get:
+      operationId: getAccountSummary
+      tags: [accounts]
+      summary: Get account summary (balance, equity, margin, free margin)
+      parameters:
+        - name: accountId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSummary"
+
+  # ── Markets ─────────────────────────────────────────────────────────────────
+  /markets:
+    get:
+      operationId: getMarkets
+      tags: [markets]
+      summary: Get available markets
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [forex, crypto, indices, commodities]
+      responses:
+        "200":
+          description: Markets list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Market"
+
+  /markets/ticker:
+    get:
+      operationId: getTicker
+      tags: [markets]
+      summary: Get live ticker for all markets
+      responses:
+        "200":
+          description: Ticker data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TickerItem"
+
+  /markets/candles:
+    get:
+      operationId: getCandles
+      tags: [markets]
+      summary: Get candlestick data for a symbol
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: timeframe
+          in: query
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 1h, 4h, 1D]
+            default: 1h
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Candle data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Candle"
+
+  # ── Trades ──────────────────────────────────────────────────────────────────
+  /trades:
+    get:
+      operationId: getTrades
+      tags: [trades]
+      summary: Get trades for an account
+      parameters:
+        - name: accountId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, pending, closed]
+      responses:
+        "200":
+          description: Trades list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+    post:
+      operationId: executeTrade
+      tags: [trades]
+      summary: Execute a trade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeInput"
+      responses:
+        "201":
+          description: Trade executed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /trades/{id}/close:
+    post:
+      operationId: closeTrade
+      tags: [trades]
+      summary: Close an open trade
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trade closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /trades/summary:
+    get:
+      operationId: getTradeSummary
+      tags: [trades]
+      summary: Get trade performance summary
+      parameters:
+        - name: accountId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trade summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradeSummary"
+
+  # ── Deposits & Withdrawals ────────────────────────────────────────────────
+  /deposits:
+    get:
+      operationId: getDeposits
+      tags: [deposits]
+      summary: Get deposit/withdrawal history
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [deposit, withdrawal]
+      responses:
+        "200":
+          description: Transaction history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+    post:
+      operationId: createDeposit
+      tags: [deposits]
+      summary: Create a deposit request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepositInput"
+      responses:
+        "201":
+          description: Deposit created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /deposits/withdraw:
+    post:
+      operationId: createWithdrawal
+      tags: [deposits]
+      summary: Create a withdrawal request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WithdrawalInput"
+      responses:
+        "201":
+          description: Withdrawal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /deposits/fee-preview:
+    get:
+      operationId: getDepositFeePreview
+      tags: [deposits]
+      summary: Preview deposit fee breakdown
+      parameters:
+        - name: amount
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Fee breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeePreview"
+
+  # ── Notifications ─────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      operationId: getNotifications
+      tags: [notifications]
+      summary: Get user notifications
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a notification as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      responses:
+        "200":
+          description: All marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ── Platform Settings ──────────────────────────────────────────────────────
+  /settings/platform:
+    get:
+      operationId: getPlatformSettings
+      tags: [settings]
+      summary: Get platform settings (fee rates, spread, etc.)
+      responses:
+        "200":
+          description: Platform settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformSettings"
+
+  # ── Admin ──────────────────────────────────────────────────────────────────
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Get admin dashboard overview metrics
+      responses:
+        "200":
+          description: Overview metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOverview"
+
+  /admin/revenue:
+    get:
+      operationId: getAdminRevenue
+      tags: [admin]
+      summary: Get house revenue breakdown
+      responses:
+        "200":
+          description: Revenue data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevenueReport"
+
+  /admin/settings:
+    patch:
+      operationId: updateAdminSettings
+      tags: [admin]
+      summary: Update admin platform settings (fees, spread)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminSettingsUpdate"
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformSettings"
+
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: Get all users (admin)
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: kycStatus
+          in: query
+          schema:
+            type: string
+            enum: [unverified, pending, verified]
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+
+  /admin/users/{id}/balance:
+    patch:
+      operationId: adjustUserBalance
+      tags: [admin]
+      summary: Manually adjust user balance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BalanceAdjustment"
+      responses:
+        "200":
+          description: Balance adjusted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+
+  /admin/users/{id}/kyc:
+    patch:
+      operationId: updateKycDecision
+      tags: [admin]
+      summary: Approve or reject KYC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KycDecision"
+      responses:
+        "200":
+          description: KYC decision saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStatus"
+
+  /admin/deposits:
+    get:
+      operationId: getAdminDeposits
+      tags: [admin]
+      summary: Get all pending deposits (admin)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Deposits list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+
+  /admin/deposits/{id}/approve:
+    post:
+      operationId: approveDeposit
+      tags: [admin]
+      summary: Approve a deposit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deposit approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /admin/deposits/{id}/reject:
+    post:
+      operationId: rejectDeposit
+      tags: [admin]
+      summary: Reject a deposit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deposit rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    # ── Auth ────────────────────────────────────────────────────────────────
+    RegisterInput:
+      type: object
+      required: [email, password, firstName, lastName]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          minLength: 6
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [user, token]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+
+    User:
+      type: object
+      required: [id, email, firstName, lastName, role, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: ["string", "null"]
+        preferredCurrency:
+          type: string
+          default: USD
+        role:
+          type: string
+          enum: [user, admin]
+        twoFaEnabled:
+          type: boolean
+        notificationsEnabled:
+          type: boolean
+        theme:
+          type: string
+          enum: [dark, light]
+          default: dark
+        createdAt:
+          type: string
+          format: date-time
+
+    ProfileUpdate:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+        preferredCurrency:
+          type: string
+        notificationsEnabled:
+          type: boolean
+        theme:
+          type: string
+          enum: [dark, light]
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6
+
+    Toggle2faInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+
+    KycStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [unverified, pending, verified, rejected]
+        documentType:
+          type: ["string", "null"]
+        submittedAt:
+          type: ["string", "null"]
+        reviewedAt:
+          type: ["string", "null"]
+        rejectionReason:
+          type: ["string", "null"]
+
+    KycInput:
+      type: object
+      required: [documentType, documentData]
+      properties:
+        documentType:
+          type: string
+          enum: [national_id, passport, drivers_license]
+        documentData:
+          type: string
+          description: Base64 encoded document or document reference
+
+    Session:
+      type: object
+      required: [id, device, ipAddress, createdAt, isCurrent]
+      properties:
+        id:
+          type: integer
+        device:
+          type: string
+        ipAddress:
+          type: string
+        location:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        isCurrent:
+          type: boolean
+
+    # ── Accounts ────────────────────────────────────────────────────────────
+    Account:
+      type: object
+      required: [id, userId, type, balance, currency, leverage, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        type:
+          type: string
+          enum: [real, demo]
+        balance:
+          type: number
+        currency:
+          type: string
+        leverage:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    AccountSummary:
+      type: object
+      required: [balance, equity, margin, freeMargin, marginLevel, openPnl]
+      properties:
+        balance:
+          type: number
+        equity:
+          type: number
+        margin:
+          type: number
+        freeMargin:
+          type: number
+        marginLevel:
+          type: number
+        openPnl:
+          type: number
+
+    # ── Markets ────────────────────────────────────────────────────────────
+    Market:
+      type: object
+      required: [id, symbol, name, category, bidPrice, askPrice, spread, change24h, volume24h]
+      properties:
+        id:
+          type: integer
+        symbol:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+          enum: [forex, crypto, indices, commodities]
+        bidPrice:
+          type: number
+        askPrice:
+          type: number
+        spread:
+          type: number
+        change24h:
+          type: number
+        volume24h:
+          type: number
+        high24h:
+          type: number
+        low24h:
+          type: number
+        pipSize:
+          type: number
+
+    TickerItem:
+      type: object
+      required: [symbol, price, change24h, direction]
+      properties:
+        symbol:
+          type: string
+        price:
+          type: number
+        change24h:
+          type: number
+        direction:
+          type: string
+          enum: [up, down, flat]
+
+    Candle:
+      type: object
+      required: [time, open, high, low, close, volume]
+      properties:
+        time:
+          type: integer
+          description: Unix timestamp in seconds
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+
+    # ── Trades ─────────────────────────────────────────────────────────────
+    Trade:
+      type: object
+      required: [id, accountId, symbol, side, type, lotSize, openPrice, status, createdAt]
+      properties:
+        id:
+          type: integer
+        accountId:
+          type: integer
+        symbol:
+          type: string
+        side:
+          type: string
+          enum: [buy, sell]
+        type:
+          type: string
+          enum: [market, limit, stop]
+        lotSize:
+          type: number
+        openPrice:
+          type: number
+        closePrice:
+          type: ["number", "null"]
+        stopLoss:
+          type: ["number", "null"]
+        takeProfit:
+          type: ["number", "null"]
+        leverage:
+          type: integer
+        margin:
+          type: number
+        pnl:
+          type: ["number", "null"]
+        fee:
+          type: number
+        status:
+          type: string
+          enum: [open, pending, closed, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: ["string", "null"]
+
+    TradeInput:
+      type: object
+      required: [accountId, symbol, side, type, lotSize, leverage]
+      properties:
+        accountId:
+          type: integer
+        symbol:
+          type: string
+        side:
+          type: string
+          enum: [buy, sell]
+        type:
+          type: string
+          enum: [market, limit, stop]
+        lotSize:
+          type: number
+        leverage:
+          type: integer
+        limitPrice:
+          type: number
+        stopLoss:
+          type: number
+        takeProfit:
+          type: number
+
+    TradeSummary:
+      type: object
+      required: [totalTrades, winRate, totalPnl, totalFees, avgTradeSize]
+      properties:
+        totalTrades:
+          type: integer
+        openTrades:
+          type: integer
+        winRate:
+          type: number
+        totalPnl:
+          type: number
+        totalFees:
+          type: number
+        avgTradeSize:
+          type: number
+        bestTrade:
+          type: ["number", "null"]
+        worstTrade:
+          type: ["number", "null"]
+
+    # ── Deposits ───────────────────────────────────────────────────────────
+    Transaction:
+      type: object
+      required: [id, userId, type, amount, fee, netAmount, method, status, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        accountId:
+          type: ["integer", "null"]
+        type:
+          type: string
+          enum: [deposit, withdrawal]
+        amount:
+          type: number
+        fee:
+          type: number
+        netAmount:
+          type: number
+        method:
+          type: string
+          enum: [mpesa, crypto_usdt, crypto_btc, card, bank_transfer]
+        status:
+          type: string
+          enum: [pending, approved, rejected, completed]
+        reference:
+          type: ["string", "null"]
+        walletAddress:
+          type: ["string", "null"]
+        phoneNumber:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: ["string", "null"]
+
+    DepositInput:
+      type: object
+      required: [amount, method, accountId]
+      properties:
+        accountId:
+          type: integer
+        amount:
+          type: number
+        method:
+          type: string
+          enum: [mpesa, crypto_usdt, crypto_btc, card, bank_transfer]
+        phoneNumber:
+          type: string
+        walletAddress:
+          type: string
+        cardLast4:
+          type: string
+
+    WithdrawalInput:
+      type: object
+      required: [amount, method, accountId]
+      properties:
+        accountId:
+          type: integer
+        amount:
+          type: number
+        method:
+          type: string
+          enum: [mpesa, crypto_usdt, crypto_btc, card, bank_transfer]
+        phoneNumber:
+          type: string
+        walletAddress:
+          type: string
+
+    FeePreview:
+      type: object
+      required: [depositAmount, feeRate, feeAmount, netAmount]
+      properties:
+        depositAmount:
+          type: number
+        feeRate:
+          type: number
+        feeAmount:
+          type: number
+        netAmount:
+          type: number
+
+    # ── Notifications ─────────────────────────────────────────────────────
+    Notification:
+      type: object
+      required: [id, userId, title, message, type, read, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+          enum: [trade, deposit, kyc, system, alert]
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Settings ───────────────────────────────────────────────────────────
+    PlatformSettings:
+      type: object
+      required: [depositFeeRate, spreadMarkup, minDeposit, maxLeverage, demoBalance]
+      properties:
+        depositFeeRate:
+          type: number
+          description: Deposit fee percentage (e.g. 0.02 = 2%)
+        spreadMarkup:
+          type: number
+          description: Additional spread markup in pips
+        minDeposit:
+          type: number
+        maxLeverage:
+          type: integer
+        demoBalance:
+          type: number
+        cryptoWalletUsdt:
+          type: string
+        cryptoWalletBtc:
+          type: string
+        mpesaPaybill:
+          type: string
+
+    # ── Admin ──────────────────────────────────────────────────────────────
+    AdminOverview:
+      type: object
+      required: [totalUsers, totalVolume, totalRevenue, pendingKyc, pendingDeposits, activeTraders]
+      properties:
+        totalUsers:
+          type: integer
+        totalVolume:
+          type: number
+        totalRevenue:
+          type: number
+        pendingKyc:
+          type: integer
+        pendingDeposits:
+          type: integer
+        activeTraders:
+          type: integer
+
+    RevenueReport:
+      type: object
+      required: [totalRevenue, depositFees, spreadRevenue, tradeCount]
+      properties:
+        totalRevenue:
+          type: number
+        depositFees:
+          type: number
+        spreadRevenue:
+          type: number
+        tradeCount:
+          type: integer
+        recentEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevenueEntry"
+
+    RevenueEntry:
+      type: object
+      required: [id, type, amount, description, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [deposit_fee, spread]
+        amount:
+          type: number
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminUser:
+      type: object
+      required: [id, email, firstName, lastName, role, kycStatus, createdAt]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        kycStatus:
+          type: string
+          enum: [unverified, pending, verified, rejected]
+        totalDeposits:
+          type: number
+        totalTrades:
+          type: integer
+        realBalance:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminSettingsUpdate:
+      type: object
+      properties:
+        depositFeeRate:
+          type: number
+        spreadMarkup:
+          type: number
+        minDeposit:
+          type: number
+        maxLeverage:
+          type: integer
+        cryptoWalletUsdt:
+          type: string
+        cryptoWalletBtc:
+          type: string
+        mpesaPaybill:
+          type: string
+
+    BalanceAdjustment:
+      type: object
+      required: [amount, reason]
+      properties:
+        amount:
+          type: number
+        reason:
+          type: string
+
+    KycDecision:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [verified, rejected]
+        rejectionReason:
+          type: string

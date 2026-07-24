@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Novus Markets"
+version = "1.0.0"
+id = "artifacts/novus-markets"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18127
+
+[services.development]
+run = "pnpm --filter @workspace/novus-markets run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/novus-markets", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/novus-markets/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18127"
+BASE_PATH = "/"

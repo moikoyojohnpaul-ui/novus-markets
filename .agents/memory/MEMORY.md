@@ -1,0 +1,1 @@
+- [Novus Markets API setup quirks](novus-markets-api-setup.md) — generated client embeds /api, custom-fetch export required, auth token flow, seed credentials
