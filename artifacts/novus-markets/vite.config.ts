@@ -13,8 +13,13 @@ if (Number.isNaN(port) || port <= 0) {
 
 const basePath = process.env.BASE_PATH || '/';
 
+
 export default defineConfig({
   base: basePath,
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  },
   plugins: [
     react(),
     tailwindcss(),
