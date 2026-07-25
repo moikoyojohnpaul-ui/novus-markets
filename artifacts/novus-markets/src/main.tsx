@@ -6,8 +6,6 @@ import './index.css';
 
 setBaseUrl(import.meta.env.VITE_API_URL || '');
 
-createRoot(document.getElementById('root')!).render(<App />);
-
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null; info: React.ErrorInfo | null }
