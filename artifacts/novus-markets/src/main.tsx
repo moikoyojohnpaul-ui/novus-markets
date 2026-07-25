@@ -1,47 +1,32 @@
-import React, { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { setBaseUrl } from '@workspace/api-client-react';
 import App from './App';
 import './index.css';
 
-setBaseUrl(import.meta.env.VITE_API_URL || '');
+// This is the root fix for "No markets available".
+// VITE_API_URL is baked in at Vercel build time.
+// The fallback string catches any case where the env var is missing.
+const apiUrl =
+  import.meta.env.VITE_API_URL ||
+  'https://novus-markets-3.onrender.com'; // ← your Render URL here
 
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error: Error | null; info: React.ErrorInfo | null }
-> {
-  state = { hasError: false, error: null, info: null };
+setBaseUrl(apiUrl);
 
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 10_000,
+    },
+  },
+});
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    this.setState({ info });
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: 40, color: 'white', background: '#0a0a0a', minHeight: '100vh' }}>
-          <h2>Something went wrong</h2>
-          <pre style={{ color: '#f87171', fontSize: 12, whiteSpace: 'pre-wrap' }}>
-            {(this.state.error as Error)?.message}
-          </pre>
-          <pre style={{ color: '#9ca3af', fontSize: 11, whiteSpace: 'pre-wrap', marginTop: 16 }}>
-            {(this.state.info as React.ErrorInfo | null)?.componentStack}
-          </pre>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary>
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
       <App />
-    </ErrorBoundary>
-  </StrictMode>
+    </QueryClientProvider>
+  </React.StrictMode>
 );
