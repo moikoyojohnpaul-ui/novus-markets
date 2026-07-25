@@ -3,11 +3,11 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
-// ✅ FIX: Only enforce PORT check in non-build environments.
-// During `vite build` (Vercel), PORT is not set — don't crash.
 const rawPort = process.env.PORT;
 const port = rawPort ? Number(rawPort) : 3000;
 
+// Only throw if PORT was explicitly set to something invalid.
+// During `vite build` on Vercel, PORT is undefined — that's fine.
 if (rawPort !== undefined && (Number.isNaN(port) || port <= 0)) {
   throw Error(`Invalid PORT value: "${rawPort}"`);
 }
@@ -24,7 +24,6 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  // ✅ FIX: Allow all hosts — needed for proxied dev environments
   server: {
     host: true,
     allowedHosts: true,
