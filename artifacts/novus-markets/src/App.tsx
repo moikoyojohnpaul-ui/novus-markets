@@ -27,6 +27,7 @@ function Router() {
       <Route path="/deposit" component={Deposit} />
       <Route path="/settings" component={Settings} />
       <Route path="/admin" component={Admin} />
+      <Route path="/markets" component={MarketsPage} />
       <Route component={NotFound} />
     </Switch>
   );
