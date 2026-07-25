@@ -6,9 +6,15 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// ✅ FIX: Never use origin:"*" with credentials:true — browsers block it.
+// List every frontend domain explicitly.
 app.use(
   cors({
-    origin: "*", // or: ['https://novusmarketss.vercel.app']
+    origin: [
+      "https://novusmarketss.vercel.app",
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ],
     credentials: true,
   })
 );
