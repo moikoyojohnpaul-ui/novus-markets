@@ -6,8 +6,6 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-// ✅ FIX: Never use origin:"*" with credentials:true — browsers block it.
-// List every frontend domain explicitly.
 app.use(
   cors({
     origin: [
