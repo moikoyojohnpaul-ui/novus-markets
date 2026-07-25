@@ -9,6 +9,7 @@ import depositsRouter from "./deposits";
 import notificationsRouter from "./notifications";
 import settingsRouter from "./settings";
 import adminRouter from "./admin";
+import seedRouter from './seed';
 
 const router: IRouter = Router();
 
@@ -22,5 +23,5 @@ router.use(depositsRouter);
 router.use(notificationsRouter);
 router.use(settingsRouter);
 router.use(adminRouter);
-
+router.use(seedRouter); 
 export default router;
