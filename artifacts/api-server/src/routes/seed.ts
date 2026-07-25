@@ -22,7 +22,7 @@ const markets = [
 
 const seedRouter = Router();
 
-seedRouter.post("/seed", async (req, res) => {
+seedRouter.get("/seed", async (req, res) => {
   try {
     const existing = await db.select().from(marketsTable);
     if (existing.length > 0) {
