@@ -37,14 +37,14 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     phone: phone ?? null,
   }).returning();
 
-  // Create real + demo accounts
-  const [realAccount] = await db.insert(accountsTable).values({
+  // Create real account (no unused variable)
+  await db.insert(accountsTable).values({
     userId: user.id,
     type: "real",
     balance: "0",
     currency: "USD",
     leverage: 100,
-  }).returning();
+  });
 
   const [platformSettings] = await db.select().from(platformSettingsTable).limit(1);
   const demoBalance = platformSettings?.demoBalance ?? "10000";
@@ -57,10 +57,8 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     leverage: 100,
   });
 
-  // Create KYC record
   await db.insert(kycTable).values({ userId: user.id, status: "unverified" });
 
-  // Create session
   const token = generateToken();
   await db.insert(sessionsTable).values({
     userId: user.id,
