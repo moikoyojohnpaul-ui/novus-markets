@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, notificationsTable } from "@workspace/db";
 import { MarkNotificationReadParams } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
@@ -9,7 +9,7 @@ const router: IRouter = Router();
 router.get("/notifications", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const notifications = await db.select().from(notificationsTable)
     .where(eq(notificationsTable.userId, req.userId!))
-    .orderBy(notificationsTable.createdAt);
+    .orderBy(sql`${notificationsTable.createdAt} DESC`); // FIXED: was ascending (oldest first)
   res.json(notifications);
 });
 
@@ -21,16 +21,22 @@ router.patch("/notifications/:id/read", requireAuth, async (req: AuthRequest, re
     return;
   }
 
-  const [notification] = await db.update(notificationsTable)
+  const [updated] = await db.update(notificationsTable)
     .set({ read: true })
-    .where(and(eq(notificationsTable.id, params.data.id), eq(notificationsTable.userId, req.userId!)))
+    .where(
+      and(
+        eq(notificationsTable.id, params.data.id),
+        eq(notificationsTable.userId, req.userId!), // ensures users can only mark their own
+      ),
+    )
     .returning();
 
-  if (!notification) {
+  if (!updated) {
     res.status(404).json({ error: "Notification not found" });
     return;
   }
-  res.json(notification);
+
+  res.json(updated);
 });
 
 router.post("/notifications/read-all", requireAuth, async (req: AuthRequest, res): Promise<void> => {
