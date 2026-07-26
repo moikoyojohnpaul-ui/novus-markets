@@ -53,7 +53,6 @@ router.get("/markets/candles", async (req, res): Promise<void> => {
 
   const [market] = await db.select().from(marketsTable).where(eq(marketsTable.symbol, symbol)).limit(1);
 
-  // Generate realistic OHLCV candle data based on the current market price
   const basePrice = market ? parseFloat(market.bidPrice) : 1.0;
   const candles = generateCandles(basePrice, limit);
 
@@ -64,9 +63,10 @@ function generateCandles(basePrice: number, count: number) {
   const now = Math.floor(Date.now() / 1000);
   const intervalSeconds = 3600; // 1h candles
   const candles = [];
-  let price = basePrice * 0.97; // start slightly below
+  let price = basePrice * 0.97;
 
-  for (let i = count; i >= 0; i--) {
+  // FIXED: was `i = count; i >= 0` — produced count+1 candles. Now exactly `count`.
+  for (let i = count - 1; i >= 0; i--) {
     const time = now - i * intervalSeconds;
     const volatility = basePrice * 0.005;
     const open = price;
