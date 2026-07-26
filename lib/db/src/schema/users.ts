@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -28,7 +28,7 @@ export type User = typeof usersTable.$inferSelect;
 
 export const kycTable = pgTable("kyc", {
   id: serial("id").primaryKey(),
-  userId: serial("user_id").notNull().references(() => usersTable.id),
+  userId: integer("user_id").notNull().references(() => usersTable.id), // was: serial
   status: kycStatusEnum("status").notNull().default("unverified"),
   documentType: text("document_type"),
   documentData: text("document_data"),
@@ -43,7 +43,7 @@ export type KycRecord = typeof kycTable.$inferSelect;
 
 export const sessionsTable = pgTable("sessions", {
   id: serial("id").primaryKey(),
-  userId: serial("user_id").notNull().references(() => usersTable.id),
+  userId: integer("user_id").notNull().references(() => usersTable.id), // was: serial
   token: text("token").notNull().unique(),
   device: text("device").notNull().default("Unknown Device"),
   ipAddress: text("ip_address").notNull().default("0.0.0.0"),
