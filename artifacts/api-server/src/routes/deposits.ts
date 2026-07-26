@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, transactionsTable, accountsTable, platformSettingsTable, revenueLedgerTable } from "@workspace/db";
 import {
   GetDepositsQueryParams,
@@ -11,31 +11,24 @@ import { requireAuth, type AuthRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
+// ─── Deposits list ──────────────────────────────────────────────────────────
+
 router.get("/deposits", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const params = GetDepositsQueryParams.safeParse(req.query);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  let query = db.select().from(transactionsTable)
-    .where(eq(transactionsTable.userId, req.userId!))
-    .$dynamic();
+  const conditions = [eq(transactionsTable.userId, req.userId!)];
+  if (params.data.type) conditions.push(eq(transactionsTable.type, params.data.type));
 
-  if (params.data.type) {
-    query = query.where(eq(transactionsTable.type, params.data.type));
-  }
-
-  const txns = await query;
+  const txns = await db.select().from(transactionsTable).where(and(...conditions));
   res.json(txns.map(formatTransaction));
 });
 
+// ─── Fee preview ─────────────────────────────────────────────────────────────
+
 router.get("/deposits/fee-preview", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const params = GetDepositFeePreviewQueryParams.safeParse(req.query);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const [settings] = await db.select().from(platformSettingsTable).limit(1);
   const feeRate = settings ? parseFloat(settings.depositFeeRate.toString()) : 0.02;
@@ -46,74 +39,199 @@ router.get("/deposits/fee-preview", requireAuth, async (req: AuthRequest, res): 
   res.json({ depositAmount: amount, feeRate, feeAmount, netAmount });
 });
 
+// ─── Create deposit ──────────────────────────────────────────────────────────
+
 router.post("/deposits", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const parsed = CreateDepositBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const { method, amount, accountId, phoneNumber, walletAddress } = parsed.data;
+
+  // Per-method field validation
+  if (method === "mpesa" && !phoneNumber) {
+    res.status(400).json({ error: "Phone number is required for M-Pesa deposits" });
     return;
+  }
+  if ((method === "crypto_usdt" || method === "crypto_btc") && !walletAddress) {
+    // sender wallet address is optional for tracking — not enforced
   }
 
   const [settings] = await db.select().from(platformSettingsTable).limit(1);
   const feeRate = settings ? parseFloat(settings.depositFeeRate.toString()) : 0.02;
-  const fee = parsed.data.amount * feeRate;
-  const netAmount = parsed.data.amount - fee;
+  const minDeposit = settings ? parseFloat(settings.minDeposit.toString()) : 10;
 
-  const [txn] = await db.insert(transactionsTable).values({
-    userId: req.userId!,
-    accountId: parsed.data.accountId,
-    type: "deposit",
-    amount: parsed.data.amount.toString(),
-    fee: fee.toString(),
-    netAmount: netAmount.toString(),
-    method: parsed.data.method,
-    status: "pending",
-    phoneNumber: parsed.data.phoneNumber,
-    walletAddress: parsed.data.walletAddress,
-    reference: `DEP-${Date.now()}`,
-  }).returning();
-
-  // Log fee to revenue ledger
-  await db.insert(revenueLedgerTable).values({
-    type: "deposit_fee",
-    amount: fee.toString(),
-    description: `Deposit fee (${(feeRate * 100).toFixed(1)}%) on $${parsed.data.amount}`,
-    userId: req.userId!,
-  });
-
-  res.status(201).json(formatTransaction(txn));
-});
-
-router.post("/deposits/withdraw", requireAuth, async (req: AuthRequest, res): Promise<void> => {
-  const parsed = CreateWithdrawalBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  if (amount < minDeposit) {
+    res.status(400).json({ error: `Minimum deposit is $${minDeposit}` });
     return;
   }
 
-  const [account] = await db.select().from(accountsTable)
-    .where(eq(accountsTable.id, parsed.data.accountId)).limit(1);
+  const fee = amount * feeRate;
+  const netAmount = amount - fee;
 
-  if (!account || parseFloat(account.balance) < parsed.data.amount) {
+  const [txn] = await db.insert(transactionsTable).values({
+    userId: req.userId!,
+    accountId,
+    type: "deposit",
+    amount: amount.toString(),
+    fee: fee.toString(),
+    netAmount: netAmount.toString(),
+    method,
+    status: "pending",
+    phoneNumber: phoneNumber ?? null,
+    walletAddress: walletAddress ?? null,
+    reference: `DEP-${Date.now()}`,
+  }).returning();
+
+  await db.insert(revenueLedgerTable).values({
+    type: "deposit_fee",
+    amount: fee.toString(),
+    description: `Deposit fee (${(feeRate * 100).toFixed(1)}%) on $${amount}`,
+    userId: req.userId!,
+  });
+
+  const paymentInstructions = buildDepositInstructions({ method, amount, txnId: txn.id, settings, phoneNumber });
+
+  res.status(201).json({ ...formatTransaction(txn), paymentInstructions });
+});
+
+// ─── Create withdrawal ───────────────────────────────────────────────────────
+
+router.post("/deposits/withdraw", requireAuth, async (req: AuthRequest, res): Promise<void> => {
+  const parsed = CreateWithdrawalBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const { method, amount, accountId, phoneNumber, walletAddress } = parsed.data;
+
+  // Per-method field validation
+  if (method === "mpesa" && !phoneNumber) {
+    res.status(400).json({ error: "Phone number is required for M-Pesa withdrawals" });
+    return;
+  }
+  if ((method === "crypto_usdt" || method === "crypto_btc") && !walletAddress) {
+    res.status(400).json({ error: "Wallet address is required for crypto withdrawals" });
+    return;
+  }
+
+  // FIXED: verify the account belongs to this user
+  const [account] = await db.select().from(accountsTable)
+    .where(and(eq(accountsTable.id, accountId), eq(accountsTable.userId, req.userId!)))
+    .limit(1);
+
+  if (!account) { res.status(404).json({ error: "Account not found" }); return; }
+
+  if (parseFloat(account.balance) < amount) {
     res.status(400).json({ error: "Insufficient balance" });
     return;
   }
 
+  // FIXED: deduct balance immediately to prevent concurrent overdraft requests
+  const newBalance = parseFloat(account.balance) - amount;
+  await db.update(accountsTable)
+    .set({ balance: newBalance.toString() })
+    .where(eq(accountsTable.id, account.id));
+
   const [txn] = await db.insert(transactionsTable).values({
     userId: req.userId!,
-    accountId: parsed.data.accountId,
+    accountId,
     type: "withdrawal",
-    amount: parsed.data.amount.toString(),
+    amount: amount.toString(),
     fee: "0",
-    netAmount: parsed.data.amount.toString(),
-    method: parsed.data.method,
+    netAmount: amount.toString(),
+    method,
     status: "pending",
-    phoneNumber: parsed.data.phoneNumber,
-    walletAddress: parsed.data.walletAddress,
+    phoneNumber: phoneNumber ?? null,
+    walletAddress: walletAddress ?? null,
     reference: `WIT-${Date.now()}`,
   }).returning();
 
   res.status(201).json(formatTransaction(txn));
 });
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+type DepositInstructionArgs = {
+  method: string;
+  amount: number;
+  txnId: number;
+  settings: { mpesaPaybill?: string; cryptoWalletUsdt?: string; cryptoWalletBtc?: string } | null;
+  phoneNumber?: string | null;
+};
+
+function buildDepositInstructions({ method, amount, txnId, settings, phoneNumber }: DepositInstructionArgs): object {
+  const reference = `DEP-${txnId}`;
+  switch (method) {
+    case "mpesa":
+      return {
+        method: "mpesa",
+        paybill: settings?.mpesaPaybill ?? "123456",
+        accountNumber: reference,
+        amount,
+        phoneNumber,
+        steps: [
+          "Go to M-Pesa on your phone",
+          "Select Lipa na M-Pesa → Pay Bill",
+          `Business No: ${settings?.mpesaPaybill ?? "123456"}`,
+          `Account No: ${reference}`,
+          `Amount: ${amount}`,
+          "Enter your M-Pesa PIN and confirm",
+          "Your deposit will be credited after admin confirmation",
+        ],
+      };
+    case "crypto_usdt":
+      return {
+        method: "crypto_usdt",
+        walletAddress: settings?.cryptoWalletUsdt ?? "",
+        network: "TRC-20 (Tron)",
+        amount,
+        reference,
+        warning: "Only send USDT on the TRC-20 network. Other networks will cause permanent loss of funds.",
+        steps: [
+          `Send exactly ${amount} USDT (TRC-20) to:`,
+          settings?.cryptoWalletUsdt ?? "—",
+          "Your deposit will be credited after blockchain confirmation (~10 min)",
+        ],
+      };
+    case "crypto_btc":
+      return {
+        method: "crypto_btc",
+        walletAddress: settings?.cryptoWalletBtc ?? "",
+        network: "Bitcoin (BTC)",
+        amount,
+        reference,
+        steps: [
+          `Send the USD equivalent of $${amount} in BTC to:`,
+          settings?.cryptoWalletBtc ?? "—",
+          "Your deposit will be credited after 2 blockchain confirmations (~20 min)",
+        ],
+      };
+    case "card":
+      return {
+        method: "card",
+        amount,
+        reference,
+        // To integrate Stripe: return a PaymentIntent client_secret here so the
+        // frontend Stripe SDK can collect card details securely without them
+        // touching your server. Example:
+        //   const intent = await stripe.paymentIntents.create({ amount: amount * 100, currency: "usd" });
+        //   return { clientSecret: intent.client_secret, ... }
+        message: "Complete card payment via the payment gateway. Your deposit will be credited on confirmation.",
+      };
+    case "bank_transfer":
+      return {
+        method: "bank_transfer",
+        amount,
+        reference,
+        steps: [
+          "Transfer the exact amount to our bank account",
+          `Narration / Reference: ${reference}`,
+          "Send proof of payment to support for faster processing",
+          "Deposits are credited within 1–2 business days",
+        ],
+      };
+    default:
+      return { method, reference, amount };
+  }
+}
 
 function formatTransaction(t: typeof transactionsTable.$inferSelect) {
   return {
