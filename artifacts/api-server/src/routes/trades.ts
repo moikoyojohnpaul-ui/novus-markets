@@ -5,7 +5,6 @@ import {
   ExecuteTradeBody,
   GetTradesQueryParams,
   GetTradeSummaryQueryParams,
-  CloseTradeParams,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 
@@ -18,15 +17,18 @@ router.get("/trades", requireAuth, async (req: AuthRequest, res): Promise<void> 
     return;
   }
 
-  let query = db.select().from(tradesTable)
-    .where(eq(tradesTable.accountId, params.data.accountId))
-    .$dynamic();
-
+  // Build all WHERE conditions upfront so accountId is never silently dropped
+  const conditions = [eq(tradesTable.accountId, params.data.accountId)];
   if (params.data.status) {
-    query = query.where(eq(tradesTable.status, params.data.status));
+    conditions.push(eq(tradesTable.status, params.data.status));
   }
 
-  const trades = await query.orderBy(sql`${tradesTable.createdAt} DESC`);
+  const trades = await db
+    .select()
+    .from(tradesTable)
+    .where(and(...conditions))
+    .orderBy(sql`${tradesTable.createdAt} DESC`);
+
   res.json(trades.map(formatTrade));
 });
 
@@ -84,13 +86,11 @@ router.post("/trades", requireAuth, async (req: AuthRequest, res): Promise<void>
     pnl: "0",
   }).returning();
 
-  // Deduct margin from balance
   if (tradeStatus === "open") {
     await db.update(accountsTable)
       .set({ balance: (balance - margin - fee).toString() })
       .where(eq(accountsTable.id, accountId));
 
-    // Log spread revenue
     await db.insert(revenueLedgerTable).values({
       type: "spread",
       amount: fee.toString(),
@@ -107,14 +107,8 @@ router.post("/trades/:id/close", requireAuth, async (req: AuthRequest, res): Pro
   const id = parseInt(raw, 10);
 
   const [trade] = await db.select().from(tradesTable).where(eq(tradesTable.id, id)).limit(1);
-  if (!trade) {
-    res.status(404).json({ error: "Trade not found" });
-    return;
-  }
-  if (trade.status !== "open") {
-    res.status(400).json({ error: "Trade is not open" });
-    return;
-  }
+  if (!trade) { res.status(404).json({ error: "Trade not found" }); return; }
+  if (trade.status !== "open") { res.status(400).json({ error: "Trade is not open" }); return; }
 
   const [market] = await db.select().from(marketsTable).where(eq(marketsTable.symbol, trade.symbol)).limit(1);
   const closePrice = market
@@ -125,20 +119,19 @@ router.post("/trades/:id/close", requireAuth, async (req: AuthRequest, res): Pro
     ? closePrice - parseFloat(trade.openPrice)
     : parseFloat(trade.openPrice) - closePrice;
 
-  const contractSize = 100000;
-  const pnl = priceDiff * parseFloat(trade.lotSize) * contractSize;
+  const pnl = priceDiff * parseFloat(trade.lotSize) * 100000;
 
-  const now = new Date();
   const [closed] = await db.update(tradesTable)
-    .set({ status: "closed", closePrice: closePrice.toString(), pnl: pnl.toString(), closedAt: now })
+    .set({ status: "closed", closePrice: closePrice.toString(), pnl: pnl.toString(), closedAt: new Date() })
     .where(eq(tradesTable.id, id))
     .returning();
 
-  // Return margin + pnl to account
   const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, trade.accountId)).limit(1);
   if (account) {
     const newBalance = parseFloat(account.balance) + parseFloat(trade.margin) + pnl;
-    await db.update(accountsTable).set({ balance: newBalance.toString() }).where(eq(accountsTable.id, trade.accountId));
+    await db.update(accountsTable)
+      .set({ balance: newBalance.toString() })
+      .where(eq(accountsTable.id, trade.accountId));
   }
 
   res.json(formatTrade(closed));
@@ -146,10 +139,7 @@ router.post("/trades/:id/close", requireAuth, async (req: AuthRequest, res): Pro
 
 router.get("/trades/summary", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const params = GetTradeSummaryQueryParams.safeParse(req.query);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const trades = await db.select().from(tradesTable)
     .where(eq(tradesTable.accountId, params.data.accountId));
