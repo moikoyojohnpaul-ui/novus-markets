@@ -1,32 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { useGetTicker } from '@workspace/api-client-react';
+import React from 'react';
+import { useGetMarkets } from '@workspace/api-client-react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-const mockTickers = [
-  { symbol: 'EUR/USD', price: 1.0924, change24h: 0.15, direction: 'up' },
-  { symbol: 'BTC/USD', price: 64230.50, change24h: 2.4, direction: 'up' },
-  { symbol: 'XAU/USD', price: 2340.10, change24h: -0.8, direction: 'down' },
-  { symbol: 'ETH/USD', price: 3450.20, change24h: 1.2, direction: 'up' },
-  { symbol: 'GBP/JPY', price: 191.45, change24h: -0.3, direction: 'down' },
-  { symbol: 'NDX500', price: 18230.40, change24h: 0.0, direction: 'flat' },
-];
-
 export function TickerTape() {
-  const [tickers, setTickers] = useState(mockTickers);
+  const { data: markets = [], isLoading } = useGetMarkets({ query: { refetchInterval: 5000 } });
 
-  // Simulate live fluctuations
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTickers(prev => prev.map(t => {
-        const volatility = t.symbol.includes('BTC') || t.symbol.includes('ETH') ? 0.001 : 0.0001;
-        const change = 1 + (Math.random() * volatility * 2 - volatility);
-        const newPrice = t.price * change;
-        const direction = newPrice > t.price ? 'up' : newPrice < t.price ? 'down' : 'flat';
-        return { ...t, price: newPrice, direction };
-      }));
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+  if (isLoading) {
+    return (
+      <div className="w-full bg-card border-b border-border overflow-hidden h-10 flex items-center px-6">
+        <div className="flex gap-12 w-full">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-4 w-24 bg-muted animate-pulse rounded" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const tickers = markets.map(m => {
+    const change = parseFloat(m.change24h);
+    const direction = change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
+    return {
+      symbol: m.symbol,
+      price: parseFloat(m.askPrice),
+      change24h: change,
+      direction
+    };
+  });
 
   return (
     <div className="w-full bg-card border-b border-border overflow-hidden h-10 flex items-center">
