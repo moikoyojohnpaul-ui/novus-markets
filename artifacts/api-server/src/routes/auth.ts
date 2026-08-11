@@ -4,12 +4,9 @@ import { db, usersTable, sessionsTable, accountsTable, kycTable, platformSetting
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
 import crypto from "crypto";
+import { hashPassword, verifyPassword } from "../lib/crypto";
 
 const router: IRouter = Router();
-
-function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password + "nm_salt_2024").digest("hex");
-}
 
 function generateToken(): string {
   return crypto.randomBytes(48).toString("hex");
@@ -29,46 +26,60 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   }
 
-  const [user] = await db.insert(usersTable).values({
-    email,
-    passwordHash: hashPassword(password),
-    firstName,
-    lastName,
-    phone: phone ?? null,
-  }).returning();
-
-  // Create real account (no unused variable)
-  await db.insert(accountsTable).values({
-    userId: user.id,
-    type: "real",
-    balance: "0",
-    currency: "USD",
-    leverage: 100,
-  });
-
-  const [platformSettings] = await db.select().from(platformSettingsTable).limit(1);
-  const demoBalance = platformSettings?.demoBalance ?? "10000";
-
-  await db.insert(accountsTable).values({
-    userId: user.id,
-    type: "demo",
-    balance: demoBalance.toString(),
-    currency: "USD",
-    leverage: 100,
-  });
-
-  await db.insert(kycTable).values({ userId: user.id, status: "unverified" });
+  const hashedPassword = await hashPassword(password);
 
   const token = generateToken();
-  await db.insert(sessionsTable).values({
-    userId: user.id,
-    token,
-    device: req.headers["user-agent"] ?? "Unknown",
-    ipAddress: req.ip ?? "0.0.0.0",
-  });
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-  const { passwordHash: _, ...safeUser } = user;
-  res.status(201).json({ user: safeUser, token });
+  let safeUser: any = null;
+
+  try {
+    await db.transaction(async (tx) => {
+      const [user] = await tx.insert(usersTable).values({
+        email,
+        passwordHash: hashedPassword,
+        firstName,
+        lastName,
+        phone: phone ?? null,
+      }).returning();
+
+      await tx.insert(accountsTable).values({
+        userId: user.id,
+        type: "real",
+        balance: "0",
+        currency: "USD",
+        leverage: 100,
+      });
+
+      const [platformSettings] = await tx.select().from(platformSettingsTable).limit(1);
+      const demoBalance = platformSettings?.demoBalance ?? "10000";
+
+      await tx.insert(accountsTable).values({
+        userId: user.id,
+        type: "demo",
+        balance: demoBalance.toString(),
+        currency: "USD",
+        leverage: 100,
+      });
+
+      await tx.insert(kycTable).values({ userId: user.id, status: "unverified" });
+
+      await tx.insert(sessionsTable).values({
+        userId: user.id,
+        token,
+        device: req.headers["user-agent"] ?? "Unknown",
+        ipAddress: req.ip ?? "0.0.0.0",
+        expiresAt,
+      });
+
+      const { passwordHash: _, ...withoutHash } = user;
+      safeUser = withoutHash;
+    });
+
+    res.status(201).json({ user: safeUser, token });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to register user" });
+  }
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
@@ -80,17 +91,26 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const { email, password } = parsed.data;
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
-  if (!user || user.passwordHash !== hashPassword(password)) {
+  if (!user) {
+    res.status(401).json({ error: "Invalid email or password" });
+    return;
+  }
+
+  const isValid = await verifyPassword(password, user.passwordHash);
+  if (!isValid) {
     res.status(401).json({ error: "Invalid email or password" });
     return;
   }
 
   const token = generateToken();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
   await db.insert(sessionsTable).values({
     userId: user.id,
     token,
     device: req.headers["user-agent"] ?? "Unknown",
     ipAddress: req.ip ?? "0.0.0.0",
+    expiresAt,
   });
 
   const { passwordHash: _, ...safeUser } = user;
