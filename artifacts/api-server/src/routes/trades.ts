@@ -17,6 +17,12 @@ router.get("/trades", requireAuth, async (req: AuthRequest, res): Promise<void> 
     return;
   }
 
+  // Verify ownership
+  const [account] = await db.select().from(accountsTable)
+    .where(and(eq(accountsTable.id, params.data.accountId), eq(accountsTable.userId, req.userId!)))
+    .limit(1);
+  if (!account) { res.status(403).json({ error: "Forbidden" }); return; }
+
   // Build all WHERE conditions upfront so accountId is never silently dropped
   const conditions = [eq(tradesTable.accountId, params.data.accountId)];
   if (params.data.status) {
@@ -70,36 +76,42 @@ router.post("/trades", requireAuth, async (req: AuthRequest, res): Promise<void>
 
   const tradeStatus = type === "market" ? "open" : "pending";
 
-  const [trade] = await db.insert(tradesTable).values({
-    accountId,
-    symbol,
-    side,
-    type,
-    lotSize: lotSize.toString(),
-    openPrice: openPrice.toString(),
-    stopLoss: stopLoss?.toString(),
-    takeProfit: takeProfit?.toString(),
-    leverage,
-    margin: margin.toString(),
-    fee: fee.toString(),
-    status: tradeStatus,
-    pnl: "0",
-  }).returning();
+  try {
+    const tradeResponse = await db.transaction(async (tx) => {
+      const [trade] = await tx.insert(tradesTable).values({
+        accountId,
+        symbol,
+        side,
+        type,
+        lotSize: lotSize.toString(),
+        openPrice: openPrice.toString(),
+        stopLoss: stopLoss?.toString(),
+        takeProfit: takeProfit?.toString(),
+        leverage,
+        margin: margin.toString(),
+        fee: fee.toString(),
+        status: tradeStatus,
+        pnl: "0",
+      }).returning();
 
-  if (tradeStatus === "open") {
-    await db.update(accountsTable)
-      .set({ balance: (balance - margin - fee).toString() })
-      .where(eq(accountsTable.id, accountId));
+      if (tradeStatus === "open") {
+        await tx.update(accountsTable)
+          .set({ balance: (balance - margin - fee).toString() })
+          .where(eq(accountsTable.id, accountId));
 
-    await db.insert(revenueLedgerTable).values({
-      type: "spread",
-      amount: fee.toString(),
-      description: `Spread on ${side} ${lotSize} ${symbol}`,
-      userId: req.userId,
+        await tx.insert(revenueLedgerTable).values({
+          type: "spread",
+          amount: fee.toString(),
+          description: `Spread on ${side} ${lotSize} ${symbol}`,
+          userId: req.userId,
+        });
+      }
+      return trade;
     });
+    res.status(201).json(formatTrade(tradeResponse));
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to open trade" });
   }
-
-  res.status(201).json(formatTrade(trade));
 });
 
 router.post("/trades/:id/close", requireAuth, async (req: AuthRequest, res): Promise<void> => {
@@ -109,6 +121,9 @@ router.post("/trades/:id/close", requireAuth, async (req: AuthRequest, res): Pro
   const [trade] = await db.select().from(tradesTable).where(eq(tradesTable.id, id)).limit(1);
   if (!trade) { res.status(404).json({ error: "Trade not found" }); return; }
   if (trade.status !== "open") { res.status(400).json({ error: "Trade is not open" }); return; }
+
+  const [account] = await db.select().from(accountsTable).where(and(eq(accountsTable.id, trade.accountId), eq(accountsTable.userId, req.userId!))).limit(1);
+  if (!account) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const [market] = await db.select().from(marketsTable).where(eq(marketsTable.symbol, trade.symbol)).limit(1);
   const closePrice = market
@@ -121,25 +136,34 @@ router.post("/trades/:id/close", requireAuth, async (req: AuthRequest, res): Pro
 
   const pnl = priceDiff * parseFloat(trade.lotSize) * 100000;
 
-  const [closed] = await db.update(tradesTable)
-    .set({ status: "closed", closePrice: closePrice.toString(), pnl: pnl.toString(), closedAt: new Date() })
-    .where(eq(tradesTable.id, id))
-    .returning();
+  try {
+    const closed = await db.transaction(async (tx) => {
+      const [closedTrade] = await tx.update(tradesTable)
+        .set({ status: "closed", closePrice: closePrice.toString(), pnl: pnl.toString(), closedAt: new Date() })
+        .where(eq(tradesTable.id, id))
+        .returning();
 
-  const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, trade.accountId)).limit(1);
-  if (account) {
-    const newBalance = parseFloat(account.balance) + parseFloat(trade.margin) + pnl;
-    await db.update(accountsTable)
-      .set({ balance: newBalance.toString() })
-      .where(eq(accountsTable.id, trade.accountId));
+      const newBalance = parseFloat(account.balance) + parseFloat(trade.margin) + pnl;
+      await tx.update(accountsTable)
+        .set({ balance: newBalance.toString() })
+        .where(eq(accountsTable.id, trade.accountId));
+      return closedTrade;
+    });
+
+    res.json(formatTrade(closed));
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to close trade" });
   }
-
-  res.json(formatTrade(closed));
 });
 
 router.get("/trades/summary", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const params = GetTradeSummaryQueryParams.safeParse(req.query);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const [account] = await db.select().from(accountsTable)
+    .where(and(eq(accountsTable.id, params.data.accountId), eq(accountsTable.userId, req.userId!)))
+    .limit(1);
+  if (!account) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const trades = await db.select().from(tradesTable)
     .where(eq(tradesTable.accountId, params.data.accountId));
@@ -158,8 +182,8 @@ router.get("/trades/summary", requireAuth, async (req: AuthRequest, res): Promis
     totalPnl,
     totalFees,
     avgTradeSize: trades.length > 0 ? trades.reduce((s, t) => s + parseFloat(t.lotSize), 0) / trades.length : 0,
-    bestTrade: pnls.length > 0 ? Math.max(...pnls) : null,
-    worstTrade: pnls.length > 0 ? Math.min(...pnls) : null,
+    bestTrade: pnls.length > 0 ? pnls.reduce((a, b) => Math.max(a, b), -Infinity) : null,
+    worstTrade: pnls.length > 0 ? pnls.reduce((a, b) => Math.min(a, b), Infinity) : null,
   });
 });
 
