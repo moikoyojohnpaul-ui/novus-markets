@@ -84,6 +84,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     details: error?.message ?? String(error),
   });
   }
+}
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
