@@ -50,6 +50,7 @@ export const sessionsTable = pgTable("sessions", {
   location: text("location"),
   isCurrent: boolean("is_current").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
 export type Session = typeof sessionsTable.$inferSelect;
