@@ -77,8 +77,12 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     });
 
     res.status(201).json({ user: safeUser, token });
-  } catch (error: any) {
-    res.status(500).json({ error: "Failed to register user" });
+  } } catch (error: any) {
+  console.error("Register error:", error);
+  res.status(500).json({
+    error: "Failed to register user",
+    details: error?.message ?? String(error),
+  });
   }
 });
 
