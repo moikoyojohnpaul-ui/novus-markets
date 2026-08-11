@@ -27,15 +27,7 @@ export function PositionsTable() {
     if (apiTrades) {
       setTrades(apiTrades);
     } else {
-      // Mock data if no API response
-      if (tab === 'open') {
-        setTrades([
-          { id: 1, accountId: 1, symbol: 'EUR/USD', side: 'buy', type: 'market', lotSize: 1.5, openPrice: 1.0920, pnl: 45.50, status: 'open', createdAt: new Date().toISOString() },
-          { id: 2, accountId: 1, symbol: 'BTC/USD', side: 'sell', type: 'market', lotSize: 0.5, openPrice: 64500, pnl: -120.00, status: 'open', createdAt: new Date().toISOString() }
-        ] as Trade[]);
-      } else {
-        setTrades([]);
-      }
+      setTrades([]);
     }
   }, [apiTrades, tab]);
 
@@ -60,13 +52,9 @@ export function PositionsTable() {
       onSuccess: () => {
         toast({ title: 'Position Closed' });
         refetch();
-        // Remove locally if mock
-        setTrades(prev => prev.filter(t => t.id !== id));
       },
-      onError: () => {
-        // Mock success anyway since backend might not exist
-        toast({ title: 'Position Closed (Mock)' });
-        setTrades(prev => prev.filter(t => t.id !== id));
+      onError: (err: any) => {
+        toast({ title: 'Error closing position', description: err.message || 'Unknown error', variant: 'destructive' });
       }
     });
   };
