@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart3, Lock, Zap } from 'lucide-react';
+import { ArrowRight, BarChart3, Lock, Zap, Loader2 } from 'lucide-react';
 import { Link } from 'wouter';
 import { useGetMarkets } from '@workspace/api-client-react';
 import { Badge } from '@/components/ui/badge';
@@ -10,12 +10,12 @@ import { motion } from 'framer-motion';
 export default function Home() {
   const [category, setCategory] = useState<'forex' | 'crypto' | 'indices' | 'commodities'>('forex');
 
-  const { data: markets = [] } = useGetMarkets(
+  const { data: markets = [], isLoading, isError } = useGetMarkets(
     { category },
     { query: { refetchInterval: 5000 } }
   );
 
-  const displayMarkets = Array.isArray(markets) && markets.length > 0 ? markets : mockMarkets[category];
+  const displayMarkets = Array.isArray(markets) ? markets : [];
 
   return (
     <MainLayout>
@@ -98,7 +98,29 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {displayMarkets.map((market, i) => (
+                  {isLoading && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                        <div className="flex justify-center mb-2"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                        Loading live markets...
+                      </td>
+                    </tr>
+                  )}
+                  {isError && !isLoading && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-destructive">
+                        Failed to load live markets. Please try again later.
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoading && !isError && displayMarkets.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                        No markets available in this category.
+                      </td>
+                    </tr>
+                  )}
+                  {!isLoading && !isError && displayMarkets.map((market, i) => (
                     <motion.tr
                       key={market.symbol}
                       initial={{ opacity: 0, y: 10 }}
@@ -209,27 +231,4 @@ export default function Home() {
     </MainLayout>
   );
 }
-
-const mockMarkets = {
-  forex: [
-    { symbol: 'EUR/USD', bidPrice: 1.09241, askPrice: 1.09243, spread: 0.2, change24h: 0.15 },
-    { symbol: 'GBP/USD', bidPrice: 1.2645, askPrice: 1.26453, spread: 0.3, change24h: -0.21 },
-    { symbol: 'USD/JPY', bidPrice: 150.12, askPrice: 150.124, spread: 0.4, change24h: 0.45 },
-    { symbol: 'AUD/USD', bidPrice: 0.6521, askPrice: 0.65214, spread: 0.4, change24h: -0.1 },
-  ],
-  crypto: [
-    { symbol: 'BTC/USD', bidPrice: 64230.5, askPrice: 64231.0, spread: 0.5, change24h: 2.4 },
-    { symbol: 'ETH/USD', bidPrice: 3450.2, askPrice: 3450.4, spread: 0.2, change24h: 1.2 },
-    { symbol: 'SOL/USD', bidPrice: 145.6, askPrice: 145.65, spread: 0.05, change24h: 5.4 },
-  ],
-  indices: [
-    { symbol: 'US500', bidPrice: 5120.4, askPrice: 5120.8, spread: 0.4, change24h: 0.8 },
-    { symbol: 'UT100', bidPrice: 18230.4, askPrice: 18231.2, spread: 0.8, change24h: 1.1 },
-    { symbol: 'DE40', bidPrice: 17800.5, askPrice: 17801.5, spread: 1.0, change24h: -0.3 },
-  ],
-  commodities: [
-    { symbol: 'XAU/USD', bidPrice: 2340.1, askPrice: 2340.4, spread: 0.3, change24h: -0.8 },
-    { symbol: 'XAG/USD', bidPrice: 28.45, askPrice: 28.47, spread: 0.02, change24h: 0.5 },
-    { symbol: 'WTI/USD', bidPrice: 82.4, askPrice: 82.43, spread: 0.03, change24h: 1.5 },
-  ],
-};
+
