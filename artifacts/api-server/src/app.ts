@@ -9,6 +9,7 @@ const app: Express = express();
 app.use(
   cors({
     origin: [
+      "https://johnpaul-uis-projects.vercel.app",
       "https://novusmarketss.vercel.app",
       "http://localhost:5173",
       "http://localhost:3000",
