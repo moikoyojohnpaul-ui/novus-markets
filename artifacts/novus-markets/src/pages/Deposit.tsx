@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { useGetAccounts, useCreateDeposit, useCreateWithdrawal, useGetDepositFeePreview, DepositInputMethod, WithdrawalInputMethod } from '@workspace/api-client-react';
+import { useGetAccounts, useCreateDeposit, useCreateWithdrawal, useGetDepositFeePreview, useGetPlatformSettings, DepositInputMethod, WithdrawalInputMethod } from '@workspace/api-client-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,8 @@ export default function Deposit() {
     { amount: Number(amount) || 0 },
     { query: { enabled: !!amount && Number(amount) > 0 } }
   );
+
+  const { data: platformSettings } = useGetPlatformSettings({ query: { enabled: isAuthenticated } });
 
   const createDeposit = useCreateDeposit();
   const createWithdrawal = useCreateWithdrawal();
@@ -154,14 +156,14 @@ export default function Deposit() {
                     <Label>Platform Wallet Address</Label>
                     <div className="flex items-center gap-2 p-3 bg-background/50 rounded-lg border border-border font-mono text-sm">
                       <span className="flex-1 truncate">
-                        {method === 'crypto_usdt' ? 'TXyz123...abcDEF' : '1A1zP1eP...3v3sL2z'}
+                        {method === 'crypto_usdt' ? platformSettings?.cryptoWalletUsdt : platformSettings?.cryptoWalletBtc}
                       </span>
                       <Button 
                         variant="ghost" 
                         size="icon" 
                         className="shrink-0 h-8 w-8"
                         onClick={() => {
-                          navigator.clipboard.writeText(method === 'crypto_usdt' ? 'TXyz123abcDEF' : '1A1zP1eP3v3sL2z');
+                          navigator.clipboard.writeText(method === 'crypto_usdt' ? platformSettings?.cryptoWalletUsdt || '' : platformSettings?.cryptoWalletBtc || '');
                           toast({ title: 'Copied to clipboard' });
                         }}
                       >
