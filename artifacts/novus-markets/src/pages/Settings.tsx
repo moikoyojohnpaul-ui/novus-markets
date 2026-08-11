@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/use-auth';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -100,21 +100,43 @@ export default function Settings() {
     });
   };
 
-  const handleKycSubmit = (docType: 'national_id' | 'passport' | 'drivers_license') => {
-    submitKyc.mutate({
-      data: {
-        documentType: docType,
-        documentData: 'base64_mock_data_here' // Mock
-      }
-    }, {
-      onSuccess: () => {
-        toast({ title: 'KYC Submitted', description: 'Your documents are under review.' });
-        queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
-      },
-      onError: (err: any) => {
-        toast({ title: 'Failed', description: err.message, variant: 'destructive' });
-      }
-    });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedDocType, setSelectedDocType] = useState<'national_id' | 'passport' | 'drivers_license'>('national_id');
+
+  const handleKycClick = (docType: 'national_id' | 'passport' | 'drivers_license') => {
+    setSelectedDocType(docType);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'File too large', description: 'Maximum file size is 5MB', variant: 'destructive' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      submitKyc.mutate({
+        data: {
+          documentType: selectedDocType,
+          documentData: base64
+        }
+      }, {
+        onSuccess: () => {
+          toast({ title: 'KYC Submitted', description: 'Your documents are under review.' });
+          queryClient.invalidateQueries({ queryKey: getGetKycStatusQueryKey() });
+        },
+        onError: (err: any) => {
+          toast({ title: 'Failed', description: err.message, variant: 'destructive' });
+        }
+      });
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handle2FAToggle = (enabled: boolean) => {
@@ -245,7 +267,7 @@ export default function Settings() {
                         key={docType}
                         variant="outline"
                         className="h-24 flex flex-col items-center justify-center gap-2 glass-hover"
-                        onClick={() => handleKycSubmit(docType as any)}
+                        onClick={() => handleKycClick(docType as any)}
                         disabled={submitKyc.isPending}
                       >
                         <Upload className="w-6 h-6" />
@@ -253,6 +275,7 @@ export default function Settings() {
                       </Button>
                     ))}
                   </div>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*,.pdf" onChange={handleFileChange} />
                 </div>
               )}
               
@@ -274,7 +297,7 @@ export default function Settings() {
                 <div className="text-center py-6 text-destructive">
                   <XCircle className="w-12 h-12 mx-auto mb-3" />
                   <p className="mb-4">{kycStatus?.rejectionReason || 'Your submission was rejected. Please re-submit valid documents.'}</p>
-                  <Button onClick={() => handleKycSubmit('national_id')} disabled={submitKyc.isPending}>
+                  <Button onClick={() => handleKycClick('national_id')} disabled={submitKyc.isPending}>
                     Re-submit Documents
                   </Button>
                 </div>
