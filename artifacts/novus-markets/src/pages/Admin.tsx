@@ -59,8 +59,8 @@ export default function Admin() {
       onSuccess: () => {
         toast({ title: 'Deposit Approved' });
       },
-      onError: () => {
-        toast({ title: 'Approved (Mock)' }); // Mock success
+      onError: (err: any) => {
+        toast({ title: 'Failed to approve', description: err.message || 'Unknown error', variant: 'destructive' });
       }
     });
   };
@@ -70,8 +70,8 @@ export default function Admin() {
       onSuccess: () => {
         toast({ title: 'Deposit Rejected', variant: 'destructive' });
       },
-      onError: () => {
-        toast({ title: 'Rejected (Mock)', variant: 'destructive' });
+      onError: (err: any) => {
+        toast({ title: 'Failed to reject', description: err.message || 'Unknown error', variant: 'destructive' });
       }
     });
   };
@@ -79,20 +79,20 @@ export default function Admin() {
   if (isLoading) return <MainLayout><div className="flex items-center justify-center py-32"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div></MainLayout>;
   if (!isAuthenticated || user?.role !== 'admin') return null;
 
-  const mockOverview = overview || {
-    totalUsers: 1240,
-    totalVolume: 18750000,
-    totalRevenue: 87540,
-    pendingKyc: 12,
-    pendingDeposits: 8,
-    activeTraders: 340
+  const displayOverview = overview || {
+    totalUsers: 0,
+    totalVolume: 0,
+    totalRevenue: 0,
+    pendingKyc: 0,
+    pendingDeposits: 0,
+    activeTraders: 0
   };
 
-  const mockRevenue = revenue || {
-    totalRevenue: 87540,
-    depositFees: 12400,
-    spreadRevenue: 75140,
-    tradeCount: 8430,
+  const displayRevenue = revenue || {
+    totalRevenue: 0,
+    depositFees: 0,
+    spreadRevenue: 0,
+    tradeCount: 0,
     recentEntries: []
   };
 
@@ -117,9 +117,9 @@ export default function Admin() {
               <div className="glass p-6 rounded-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <Users className="w-8 h-8 text-blue-500" />
-                  <Badge variant="secondary">{mockOverview.activeTraders} active</Badge>
+                  <Badge variant="secondary">{displayOverview.activeTraders} active</Badge>
                 </div>
-                <p className="text-3xl font-display font-bold">{mockOverview.totalUsers.toLocaleString()}</p>
+                <p className="text-3xl font-display font-bold">{displayOverview.totalUsers.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Total Users</p>
               </div>
               
@@ -127,7 +127,7 @@ export default function Admin() {
                 <div className="flex items-center justify-between mb-4">
                   <DollarSign className="w-8 h-8 text-success" />
                 </div>
-                <p className="text-3xl font-display font-bold">${mockOverview.totalRevenue.toLocaleString()}</p>
+                <p className="text-3xl font-display font-bold">${displayOverview.totalRevenue.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
               </div>
               
@@ -135,7 +135,7 @@ export default function Admin() {
                 <div className="flex items-center justify-between mb-4">
                   <Activity className="w-8 h-8 text-primary" />
                 </div>
-                <p className="text-3xl font-display font-bold">${(mockOverview.totalVolume / 1e6).toFixed(1)}M</p>
+                <p className="text-3xl font-display font-bold">${(displayOverview.totalVolume / 1e6).toFixed(1)}M</p>
                 <p className="text-sm text-muted-foreground">Volume Traded</p>
               </div>
             </div>
@@ -172,19 +172,19 @@ export default function Admin() {
           <TabsContent value="revenue" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="glass p-6 rounded-2xl">
-                <p className="text-2xl font-display font-bold">${mockRevenue.totalRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-display font-bold">${displayRevenue.totalRevenue.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
               </div>
               <div className="glass p-6 rounded-2xl">
-                <p className="text-2xl font-display font-bold">${mockRevenue.depositFees.toLocaleString()}</p>
+                <p className="text-2xl font-display font-bold">${displayRevenue.depositFees.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Deposit Fees</p>
               </div>
               <div className="glass p-6 rounded-2xl">
-                <p className="text-2xl font-display font-bold">${mockRevenue.spreadRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-display font-bold">${displayRevenue.spreadRevenue.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Spread Revenue</p>
               </div>
               <div className="glass p-6 rounded-2xl">
-                <p className="text-2xl font-display font-bold">{mockRevenue.tradeCount.toLocaleString()}</p>
+                <p className="text-2xl font-display font-bold">{displayRevenue.tradeCount.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Trade Count</p>
               </div>
             </div>
