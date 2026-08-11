@@ -77,16 +77,14 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     });
 
     res.status(201).json({ user: safeUser, token });
-  } } catch (error: any) {
-  console.error("Register error:", error);
-  res.status(500).json({
-    error: "Failed to register user",
-    details: error?.message ?? String(error),
-  });
+  } catch (error: any) {
+    console.error("Register error:", error);
+    res.status(500).json({
+      error: "Failed to register user",
+      details: error?.message ?? String(error),
+    });
   }
-}
 });
-
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
