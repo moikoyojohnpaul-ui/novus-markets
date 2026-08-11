@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, transactionsTable, accountsTable, platformSettingsTable, revenueLedgerTable } from "@workspace/db";
 import {
   GetDepositsQueryParams,
@@ -56,6 +56,13 @@ router.post("/deposits", requireAuth, async (req: AuthRequest, res): Promise<voi
     // sender wallet address is optional for tracking — not enforced
   }
 
+  // Verify account belongs to user
+  const [account] = await db.select().from(accountsTable)
+    .where(and(eq(accountsTable.id, accountId), eq(accountsTable.userId, req.userId!)))
+    .limit(1);
+
+  if (!account) { res.status(403).json({ error: "Forbidden or account not found" }); return; }
+
   const [settings] = await db.select().from(platformSettingsTable).limit(1);
   const feeRate = settings ? parseFloat(settings.depositFeeRate.toString()) : 0.02;
   const minDeposit = settings ? parseFloat(settings.minDeposit.toString()) : 10;
@@ -82,13 +89,6 @@ router.post("/deposits", requireAuth, async (req: AuthRequest, res): Promise<voi
     reference: `DEP-${Date.now()}`,
   }).returning();
 
-  await db.insert(revenueLedgerTable).values({
-    type: "deposit_fee",
-    amount: fee.toString(),
-    description: `Deposit fee (${(feeRate * 100).toFixed(1)}%) on $${amount}`,
-    userId: req.userId!,
-  });
-
   const paymentInstructions = buildDepositInstructions({ method, amount, txnId: txn.id, settings, phoneNumber });
 
   res.status(201).json({ ...formatTransaction(txn), paymentInstructions });
@@ -112,39 +112,43 @@ router.post("/deposits/withdraw", requireAuth, async (req: AuthRequest, res): Pr
     return;
   }
 
-  // FIXED: verify the account belongs to this user
-  const [account] = await db.select().from(accountsTable)
-    .where(and(eq(accountsTable.id, accountId), eq(accountsTable.userId, req.userId!)))
-    .limit(1);
+  try {
+    const txnResponse = await db.transaction(async (tx) => {
+      // Atomic deduction to prevent concurrent overdraft requests
+      const [updatedAccount] = await tx.update(accountsTable)
+        .set({ balance: sql`CAST(${accountsTable.balance} AS numeric) - ${amount}` })
+        .where(and(
+          eq(accountsTable.id, accountId),
+          eq(accountsTable.userId, req.userId!),
+          sql`CAST(${accountsTable.balance} AS numeric) >= ${amount}`
+        ))
+        .returning();
 
-  if (!account) { res.status(404).json({ error: "Account not found" }); return; }
+      if (!updatedAccount) {
+        throw new Error("Insufficient balance or account not found");
+      }
 
-  if (parseFloat(account.balance) < amount) {
-    res.status(400).json({ error: "Insufficient balance" });
-    return;
+      const [txn] = await tx.insert(transactionsTable).values({
+        userId: req.userId!,
+        accountId,
+        type: "withdrawal",
+        amount: amount.toString(),
+        fee: "0",
+        netAmount: amount.toString(),
+        method,
+        status: "pending",
+        phoneNumber: phoneNumber ?? null,
+        walletAddress: walletAddress ?? null,
+        reference: `WIT-${Date.now()}`,
+      }).returning();
+      
+      return txn;
+    });
+
+    res.status(201).json(formatTransaction(txnResponse));
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || "Failed to process withdrawal" });
   }
-
-  // FIXED: deduct balance immediately to prevent concurrent overdraft requests
-  const newBalance = parseFloat(account.balance) - amount;
-  await db.update(accountsTable)
-    .set({ balance: newBalance.toString() })
-    .where(eq(accountsTable.id, account.id));
-
-  const [txn] = await db.insert(transactionsTable).values({
-    userId: req.userId!,
-    accountId,
-    type: "withdrawal",
-    amount: amount.toString(),
-    fee: "0",
-    netAmount: amount.toString(),
-    method,
-    status: "pending",
-    phoneNumber: phoneNumber ?? null,
-    walletAddress: walletAddress ?? null,
-    reference: `WIT-${Date.now()}`,
-  }).returning();
-
-  res.status(201).json(formatTransaction(txn));
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
