@@ -3,13 +3,9 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, kycTable, sessionsTable } from "@workspace/db";
 import { UpdateProfileBody, SubmitKycBody, ChangePasswordBody, Toggle2faBody } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
-import crypto from "crypto";
+import { hashPassword, verifyPassword } from "../lib/crypto";
 
 const router: IRouter = Router();
-
-function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password + "nm_salt_2024").digest("hex");
-}
 
 router.patch("/users/profile", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const parsed = UpdateProfileBody.safeParse(req.body);
@@ -89,11 +85,17 @@ router.post("/users/change-password", requireAuth, async (req: AuthRequest, res)
     return;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!)).limit(1);
-  if (!user || user.passwordHash !== hashPassword(parsed.data.currentPassword)) {
+  if (!user) {
     res.status(400).json({ error: "Current password is incorrect" });
     return;
   }
-  await db.update(usersTable).set({ passwordHash: hashPassword(parsed.data.newPassword) }).where(eq(usersTable.id, req.userId!));
+  const isValid = await verifyPassword(parsed.data.currentPassword, user.passwordHash);
+  if (!isValid) {
+    res.status(400).json({ error: "Current password is incorrect" });
+    return;
+  }
+  const newHash = await hashPassword(parsed.data.newPassword);
+  await db.update(usersTable).set({ passwordHash: newHash }).where(eq(usersTable.id, req.userId!));
   res.json({ message: "Password changed successfully" });
 });
 

@@ -23,5 +23,7 @@ router.use(depositsRouter);
 router.use(notificationsRouter);
 router.use(settingsRouter);
 router.use(adminRouter);
-router.use(seedRouter); 
+if (process.env.NODE_ENV !== "production") {
+  router.use(seedRouter);
+} 
 export default router;

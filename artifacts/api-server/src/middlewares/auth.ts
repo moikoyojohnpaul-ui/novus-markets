@@ -14,34 +14,33 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     return;
   }
   const token = auth.slice(7);
-  const [session] = await db
-    .select({ userId: sessionsTable.userId })
+  const [result] = await db
+    .select({
+      userId: sessionsTable.userId,
+      expiresAt: sessionsTable.expiresAt,
+      role: usersTable.role
+    })
     .from(sessionsTable)
+    .innerJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
     .where(eq(sessionsTable.token, token))
     .limit(1);
 
-  if (!session) {
+  if (!result || new Date() > result.expiresAt) {
     res.status(401).json({ error: "Invalid or expired token" });
     return;
   }
-  req.userId = session.userId;
 
-  const [user] = await db
-    .select({ role: usersTable.role })
-    .from(usersTable)
-    .where(eq(usersTable.id, session.userId))
-    .limit(1);
-
-  req.userRole = user?.role ?? "user";
+  req.userId = result.userId;
+  req.userRole = result.role;
   next();
 }
 
-export async function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  await requireAuth(req, res, async () => {
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
     if (req.userRole !== "admin") {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
     next();
-  });
+  }).catch(next);
 }

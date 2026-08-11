@@ -272,21 +272,37 @@ router.post("/admin/deposits/:id/approve", requireAdmin, async (req: AuthRequest
     res.status(400).json({ error: `Transaction is already ${txn.status}` }); return;
   }
 
-  const [updated] = await db.update(transactionsTable)
-    .set({ status: "approved", reviewedAt: new Date() })
-    .where(eq(transactionsTable.id, id))
-    .returning();
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const [updatedTxn] = await tx.update(transactionsTable)
+        .set({ status: "approved", reviewedAt: new Date() })
+        .where(eq(transactionsTable.id, id))
+        .returning();
 
-  // Credit balance for deposits only — withdrawals were already deducted at creation
-  if (txn.type === "deposit" && txn.accountId) {
-    const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, txn.accountId)).limit(1);
-    if (account) {
-      const newBalance = parseFloat(account.balance) + parseFloat(txn.netAmount);
-      await db.update(accountsTable).set({ balance: newBalance.toString() }).where(eq(accountsTable.id, txn.accountId));
-    }
+      // Credit balance for deposits only — withdrawals were already deducted at creation
+      if (txn.type === "deposit" && txn.accountId) {
+        const [account] = await tx.select().from(accountsTable).where(eq(accountsTable.id, txn.accountId)).limit(1);
+        if (account) {
+          const newBalance = parseFloat(account.balance) + parseFloat(txn.netAmount);
+          await tx.update(accountsTable).set({ balance: newBalance.toString() }).where(eq(accountsTable.id, txn.accountId));
+        }
+
+        if (parseFloat(txn.fee) > 0) {
+          await tx.insert(revenueLedgerTable).values({
+            type: "deposit_fee",
+            amount: txn.fee,
+            description: `Deposit fee on $${txn.amount}`,
+            userId: txn.userId,
+          });
+        }
+      }
+      return updatedTxn;
+    });
+
+    res.json(formatTransaction(updated));
+  } catch (error) {
+    res.status(500).json({ error: "Failed to approve transaction" });
   }
-
-  res.json(formatTransaction(updated));
 });
 
 // Reject deposit or withdrawal
@@ -299,21 +315,28 @@ router.post("/admin/deposits/:id/reject", requireAdmin, async (req: AuthRequest,
     res.status(400).json({ error: `Transaction is already ${txn.status}` }); return;
   }
 
-  const [updated] = await db.update(transactionsTable)
-    .set({ status: "rejected", reviewedAt: new Date() })
-    .where(eq(transactionsTable.id, id))
-    .returning();
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const [updatedTxn] = await tx.update(transactionsTable)
+        .set({ status: "rejected", reviewedAt: new Date() })
+        .where(eq(transactionsTable.id, id))
+        .returning();
 
-  // FIXED: refund the pre-deducted balance when a withdrawal is rejected
-  if (txn.type === "withdrawal" && txn.accountId) {
-    const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, txn.accountId)).limit(1);
-    if (account) {
-      const refunded = parseFloat(account.balance) + parseFloat(txn.amount);
-      await db.update(accountsTable).set({ balance: refunded.toString() }).where(eq(accountsTable.id, txn.accountId));
-    }
+      // FIXED: refund the pre-deducted balance when a withdrawal is rejected
+      if (txn.type === "withdrawal" && txn.accountId) {
+        const [account] = await tx.select().from(accountsTable).where(eq(accountsTable.id, txn.accountId)).limit(1);
+        if (account) {
+          const refunded = parseFloat(account.balance) + parseFloat(txn.amount);
+          await tx.update(accountsTable).set({ balance: refunded.toString() }).where(eq(accountsTable.id, txn.accountId));
+        }
+      }
+      return updatedTxn;
+    });
+
+    res.json(formatTransaction(updated));
+  } catch (error) {
+    res.status(500).json({ error: "Failed to reject transaction" });
   }
-
-  res.json(formatTransaction(updated));
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
