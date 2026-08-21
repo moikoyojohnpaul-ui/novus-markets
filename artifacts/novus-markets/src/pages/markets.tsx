@@ -7,27 +7,29 @@ import { Button } from '@/components/ui/button';
 import { useGetMarkets } from '@workspace/api-client-react';
 import { Search, TrendingUp } from 'lucide-react';
 import type { GetMarketsCategory } from '@workspace/api-client-react';
+import { useMarketData } from '../hooks/use-market-data';
 
 export default function MarketsPage() {
   const [category, setCategory] = useState<GetMarketsCategory>('forex');
   const [search, setSearch] = useState('');
 
-  const { data: markets, isLoading, isError } = useGetMarkets(
+  const { data: initialMarketsData, isLoading, isError } = useGetMarkets(
     { category },
-    { query: { refetchInterval: 5000, retry: false } }
+    { query: { refetchInterval: false, retry: false } }
   );
 
+  const initialMarketsList = Array.isArray(initialMarketsData) ? initialMarketsData : [];
+  const { markets } = useMarketData(initialMarketsList as any);
+  
   const prevPricesRef = useRef<Record<number, { bid: number; ask: number }>>({});
   const [priceFlash, setPriceFlash] = useState<Record<number, 'up' | 'down' | null>>({});
 
-  const marketsList = Array.isArray(markets) ? markets : [];
-
   useEffect(() => {
-    if (!marketsList.length) return;
+    if (!markets.length) return;
 
     const newFlash: Record<number, 'up' | 'down' | null> = {};
 
-    marketsList.forEach((market) => {
+    markets.forEach((market: any) => {
       const prev = prevPricesRef.current[market.id];
       if (prev) {
         if (market.bidPrice > prev.bid || market.askPrice > prev.ask) {
@@ -45,8 +47,8 @@ export default function MarketsPage() {
     return () => clearTimeout(timeout);
   }, [markets]);
 
-  const filteredMarkets = marketsList.filter(
-    (m) =>
+  const filteredMarkets = markets.filter(
+    (m: any) =>
       m.symbol.toLowerCase().includes(search.toLowerCase()) ||
       m.name.toLowerCase().includes(search.toLowerCase())
   );
