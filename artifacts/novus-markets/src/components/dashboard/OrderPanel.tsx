@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, TrendingUp, TrendingDown } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMarketData } from '@/hooks/use-market-data';
 
 export function OrderPanel() {
   const { activeSymbol, activeAccount } = useDashboard();
@@ -20,6 +21,9 @@ export function OrderPanel() {
   const [price, setPrice] = useState<string>('');
   const [sl, setSl] = useState<string>('');
   const [tp, setTp] = useState<string>('');
+  
+  const { marketMap } = useMarketData();
+  const currentMarket = marketMap[activeSymbol];
   
   const executeTrade = useExecuteTrade();
 
@@ -68,19 +72,21 @@ export function OrderPanel() {
         <div className="grid grid-cols-2 gap-2 bg-background/50 p-1 rounded-lg border border-border">
           <button
             onClick={() => setSide('buy')}
-            className={`py-2 rounded-md font-semibold text-sm transition-all ${
+            className={`py-2 flex flex-col items-center justify-center rounded-md font-semibold text-sm transition-all ${
               side === 'buy' ? 'bg-success text-success-foreground shadow-md' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Buy
+            <span>Buy</span>
+            <span className="text-xs font-mono opacity-80">{currentMarket ? parseFloat(currentMarket.askPrice).toFixed(5) : '-'}</span>
           </button>
           <button
             onClick={() => setSide('sell')}
-            className={`py-2 rounded-md font-semibold text-sm transition-all ${
+            className={`py-2 flex flex-col items-center justify-center rounded-md font-semibold text-sm transition-all ${
               side === 'sell' ? 'bg-destructive text-destructive-foreground shadow-md' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            Sell
+            <span>Sell</span>
+            <span className="text-xs font-mono opacity-80">{currentMarket ? parseFloat(currentMarket.bidPrice).toFixed(5) : '-'}</span>
           </button>
         </div>
 

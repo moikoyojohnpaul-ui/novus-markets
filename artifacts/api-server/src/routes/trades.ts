@@ -35,7 +35,25 @@ router.get("/trades", requireAuth, async (req: AuthRequest, res): Promise<void> 
     .where(and(...conditions))
     .orderBy(sql`${tradesTable.createdAt} DESC`);
 
-  res.json(trades.map(formatTrade));
+  const markets = await db.select().from(marketsTable);
+  const marketMap = new Map(markets.map(m => [m.symbol, m]));
+
+  const tradesWithDynamicPnl = trades.map(t => {
+    if (t.status === "open") {
+      const m = marketMap.get(t.symbol);
+      if (m) {
+        const closePrice = t.side === "buy" ? parseFloat(m.bidPrice) : parseFloat(m.askPrice);
+        const priceDiff = t.side === "buy" 
+          ? closePrice - parseFloat(t.openPrice) 
+          : parseFloat(t.openPrice) - closePrice;
+        const pnl = priceDiff * parseFloat(t.lotSize) * 100000;
+        return { ...t, pnl: pnl.toString() };
+      }
+    }
+    return t;
+  });
+
+  res.json(tradesWithDynamicPnl.map(formatTrade));
 });
 
 router.post("/trades", requireAuth, async (req: AuthRequest, res): Promise<void> => {
@@ -168,8 +186,26 @@ router.get("/trades/summary", requireAuth, async (req: AuthRequest, res): Promis
   const trades = await db.select().from(tradesTable)
     .where(eq(tradesTable.accountId, params.data.accountId));
 
+  const markets = await db.select().from(marketsTable);
+  const marketMap = new Map(markets.map(m => [m.symbol, m]));
+
   const closed = trades.filter(t => t.status === "closed");
   const open = trades.filter(t => t.status === "open");
+
+  // Dynamic PNL for open trades
+  let unrealizedPnl = 0;
+  for (const t of open) {
+    const m = marketMap.get(t.symbol);
+    if (m) {
+      const closePrice = t.side === "buy" ? parseFloat(m.bidPrice) : parseFloat(m.askPrice);
+      const priceDiff = t.side === "buy" 
+        ? closePrice - parseFloat(t.openPrice) 
+        : parseFloat(t.openPrice) - closePrice;
+      const pnl = priceDiff * parseFloat(t.lotSize) * 100000;
+      unrealizedPnl += pnl;
+    }
+  }
+
   const wins = closed.filter(t => parseFloat(t.pnl ?? "0") > 0);
   const totalPnl = closed.reduce((s, t) => s + parseFloat(t.pnl ?? "0"), 0);
   const totalFees = trades.reduce((s, t) => s + parseFloat(t.fee), 0);
@@ -180,6 +216,7 @@ router.get("/trades/summary", requireAuth, async (req: AuthRequest, res): Promis
     openTrades: open.length,
     winRate: closed.length > 0 ? (wins.length / closed.length) * 100 : 0,
     totalPnl,
+    unrealizedPnl,
     totalFees,
     avgTradeSize: trades.length > 0 ? trades.reduce((s, t) => s + parseFloat(t.lotSize), 0) / trades.length : 0,
     bestTrade: pnls.length > 0 ? pnls.reduce((a, b) => Math.max(a, b), -Infinity) : null,
