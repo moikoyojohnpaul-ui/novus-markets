@@ -1,4 +1,5 @@
-import { pgTable, serial, timestamp, numeric, integer, text, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, timestamp, numeric, integer, text, pgEnum, index, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -14,6 +15,11 @@ export const accountsTable = pgTable("accounts", {
   leverage: integer("leverage").notNull().default(100),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => {
+  return [
+    index("account_user_idx").on(table.userId),
+    check("balance_positive", sql`${table.balance} >= 0`)
+  ];
 });
 
 export const insertAccountSchema = createInsertSchema(accountsTable).omit({ id: true, createdAt: true, updatedAt: true });
