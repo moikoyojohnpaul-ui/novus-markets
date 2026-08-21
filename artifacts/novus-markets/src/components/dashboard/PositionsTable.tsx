@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
+import { useMarketData } from '@/hooks/use-market-data';
 
 export function PositionsTable() {
   const { activeAccount } = useDashboard();
@@ -31,21 +32,29 @@ export function PositionsTable() {
     }
   }, [apiTrades, tab]);
 
-  // Simulate floating PnL every 2 seconds
+  // Real floating PnL calculation via WebSockets
+  const { marketMap } = useMarketData();
+
   useEffect(() => {
-    if (tab !== 'open' || trades.length === 0) return;
+    if (tab !== 'open' || !apiTrades) return;
     
-    const interval = setInterval(() => {
-      setTrades(prev => prev.map(t => {
-        if (t.status === 'open') {
-          const tick = (Math.random() - 0.5) * 10;
-          return { ...t, pnl: (t.pnl || 0) + tick };
+    // We update local trades array with real-time PNL
+    const updatedTrades = apiTrades.map(t => {
+      if (t.status === 'open') {
+        const m = marketMap[t.symbol];
+        if (m) {
+          const closePrice = t.side === 'buy' ? parseFloat(m.bidPrice) : parseFloat(m.askPrice);
+          const priceDiff = t.side === 'buy' 
+            ? closePrice - t.openPrice 
+            : t.openPrice - closePrice;
+          const pnl = priceDiff * t.lotSize * 100000;
+          return { ...t, pnl };
         }
-        return t;
-      }));
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [tab, trades.length]);
+      }
+      return t;
+    });
+    setTrades(updatedTrades);
+  }, [marketMap, apiTrades, tab]);
 
   const handleClose = (id: number) => {
     closeTrade.mutate({ id }, {
