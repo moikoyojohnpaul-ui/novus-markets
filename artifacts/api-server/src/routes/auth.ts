@@ -1,4 +1,5 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
+import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { db, usersTable, sessionsTable, accountsTable, kycTable, platformSettingsTable } from "@workspace/db";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
@@ -12,7 +13,23 @@ function generateToken(): string {
   return crypto.randomBytes(48).toString("hex");
 }
 
-router.post("/auth/register", async (req, res): Promise<void> => {
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10, // 10 requests per window
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+
+function setAuthCookie(res: Response, token: string, expiresAt: Date) {
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires: expiresAt,
+  });
+}
+
+router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -35,12 +52,15 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   try {
     await db.transaction(async (tx) => {
+      const emailVerificationToken = crypto.randomBytes(32).toString("hex");
+
       const [user] = await tx.insert(usersTable).values({
         email,
         passwordHash: hashedPassword,
         firstName,
         lastName,
         phone: phone ?? null,
+        emailVerificationToken,
       }).returning();
 
       await tx.insert(accountsTable).values({
@@ -76,13 +96,14 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       safeUser = withoutHash;
     });
 
+    setAuthCookie(res, token, expiresAt);
     res.status(201).json({ user: safeUser, token });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to register user" });
   }
 });
 
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -114,13 +135,20 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   });
 
   const { passwordHash: _, ...safeUser } = user;
+  setAuthCookie(res, token, expiresAt);
   res.json({ user: safeUser, token });
 });
 
 router.post("/auth/logout", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const auth = req.headers.authorization ?? "";
-  const token = auth.slice(7);
-  await db.delete(sessionsTable).where(eq(sessionsTable.token, token));
+  const cookieToken = req.cookies?.token;
+  const token = cookieToken || auth.slice(7);
+  
+  if (token) {
+    await db.delete(sessionsTable).where(eq(sessionsTable.token, token));
+  }
+  
+  res.clearCookie("token");
   res.json({ message: "Logged out" });
 });
 
