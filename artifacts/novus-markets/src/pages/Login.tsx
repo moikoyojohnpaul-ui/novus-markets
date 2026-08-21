@@ -31,7 +31,7 @@ export default function Login() {
   const onSubmit = (data: z.infer<typeof loginSchema>) => {
     loginMutation.mutate({ data }, {
       onSuccess: (res) => {
-        login(res.token);
+        login();
         toast({ title: 'Welcome back', description: 'Successfully logged in.' });
         setLocation('/dashboard');
       },

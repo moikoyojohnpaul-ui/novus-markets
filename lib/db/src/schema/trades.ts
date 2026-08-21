@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { accountsTable } from "./accounts";
@@ -25,6 +25,13 @@ export const tradesTable = pgTable("trades", {
   status: tradeStatusEnum("status").notNull().default("open"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
+}, (table) => {
+  return [
+    index("trade_account_idx").on(table.accountId),
+    index("trade_symbol_idx").on(table.symbol),
+    index("trade_status_idx").on(table.status),
+    index("trade_created_at_idx").on(table.createdAt)
+  ];
 });
 
 export const insertTradeSchema = createInsertSchema(tradesTable).omit({ id: true, createdAt: true });

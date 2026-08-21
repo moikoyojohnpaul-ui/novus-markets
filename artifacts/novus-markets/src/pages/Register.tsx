@@ -33,8 +33,8 @@ export default function Register() {
   const onSubmit = (data: z.infer<typeof registerSchema>) => {
     registerMutation.mutate({ data }, {
       onSuccess: (res) => {
-        login(res.token);
-        toast({ title: 'Account created', description: 'Welcome to Novus Markets.' });
+        login();
+        toast({ title: 'Account created', description: 'Welcome to Novus Markets!' });
         setLocation('/dashboard');
       },
       onError: (err) => {

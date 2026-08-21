@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { db, usersTable, kycTable, sessionsTable } from "@workspace/db";
 import { UpdateProfileBody, SubmitKycBody, ChangePasswordBody, Toggle2faBody } from "@workspace/api-zod";
 import { requireAuth, type AuthRequest } from "../middlewares/auth";
@@ -66,7 +66,8 @@ router.post("/users/kyc", requireAuth, async (req: AuthRequest, res): Promise<vo
 
 router.get("/users/sessions", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const auth = req.headers.authorization ?? "";
-  const currentToken = auth.slice(7);
+  const cookieToken = req.cookies?.token;
+  const currentToken = cookieToken || auth.slice(7);
   const sessions = await db.select().from(sessionsTable).where(eq(sessionsTable.userId, req.userId!));
   res.json(sessions.map(s => ({
     id: s.id,
@@ -95,7 +96,25 @@ router.post("/users/change-password", requireAuth, async (req: AuthRequest, res)
     return;
   }
   const newHash = await hashPassword(parsed.data.newPassword);
-  await db.update(usersTable).set({ passwordHash: newHash }).where(eq(usersTable.id, req.userId!));
+  
+  await db.transaction(async (tx) => {
+    await tx.update(usersTable).set({ passwordHash: newHash }).where(eq(usersTable.id, req.userId!));
+    
+    // Revoke all sessions except the current one
+    const auth = req.headers.authorization ?? "";
+    const cookieToken = req.cookies?.token;
+    const currentToken = cookieToken || auth.slice(7);
+    
+    if (currentToken) {
+      await tx.delete(sessionsTable).where(
+        and(
+          eq(sessionsTable.userId, req.userId!),
+          ne(sessionsTable.token, currentToken)
+        )
+      );
+    }
+  });
+  
   res.json({ message: "Password changed successfully" });
 });
 
@@ -107,6 +126,37 @@ router.patch("/users/2fa", requireAuth, async (req: AuthRequest, res): Promise<v
   }
   await db.update(usersTable).set({ twoFaEnabled: parsed.data.enabled }).where(eq(usersTable.id, req.userId!));
   res.json({ message: `2FA ${parsed.data.enabled ? "enabled" : "disabled"}` });
+});
+
+router.post("/users/verify-email", requireAuth, async (req: AuthRequest, res): Promise<void> => {
+  const { token } = req.body;
+  if (!token) {
+    res.status(400).json({ error: "Token is required" });
+    return;
+  }
+  
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  
+  if (user.isEmailVerified) {
+    res.status(400).json({ error: "Email is already verified" });
+    return;
+  }
+  
+  if (user.emailVerificationToken !== token) {
+    res.status(400).json({ error: "Invalid token" });
+    return;
+  }
+  
+  await db.update(usersTable).set({ 
+    isEmailVerified: true, 
+    emailVerificationToken: null 
+  }).where(eq(usersTable.id, req.userId!));
+  
+  res.json({ message: "Email verified successfully" });
 });
 
 export default router;

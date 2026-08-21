@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -18,11 +18,16 @@ export const transactionsTable = pgTable("transactions", {
   netAmount: numeric("net_amount", { precision: 18, scale: 8 }).notNull(),
   method: transactionMethodEnum("method").notNull(),
   status: transactionStatusEnum("status").notNull().default("pending"),
-  reference: text("reference"),
+  reference: text("reference").unique(),
   walletAddress: text("wallet_address"),
   phoneNumber: text("phone_number"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+}, (table) => {
+  return [
+    index("tx_user_idx").on(table.userId),
+    index("tx_status_idx").on(table.status)
+  ];
 });
 
 export const insertTransactionSchema = createInsertSchema(transactionsTable).omit({ id: true, createdAt: true });

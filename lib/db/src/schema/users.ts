@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, boolean, pgEnum, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -18,8 +18,14 @@ export const usersTable = pgTable("users", {
   twoFaEnabled: boolean("two_fa_enabled").notNull().default(false),
   notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
   theme: themeEnum("theme").notNull().default("dark"),
+  isEmailVerified: boolean("is_email_verified").notNull().default(false),
+  emailVerificationToken: text("email_verification_token"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => {
+  return [
+    index("email_idx").on(table.email)
+  ];
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
@@ -37,6 +43,10 @@ export const kycTable = pgTable("kyc", {
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => {
+  return [
+    index("kyc_user_idx").on(table.userId)
+  ];
 });
 
 export type KycRecord = typeof kycTable.$inferSelect;
@@ -51,6 +61,11 @@ export const sessionsTable = pgTable("sessions", {
   isCurrent: boolean("is_current").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => {
+  return [
+    index("session_user_idx").on(table.userId),
+    index("session_token_idx").on(table.token)
+  ];
 });
 
 export type Session = typeof sessionsTable.$inferSelect;

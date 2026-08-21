@@ -9,11 +9,18 @@ export interface AuthRequest extends Request {
 
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+  const cookieToken = req.cookies?.token;
+  
+  let token = cookieToken;
+
+  if (!token) {
+    if (!auth || !auth.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    token = auth.slice(7);
   }
-  const token = auth.slice(7);
+
   const [result] = await db
     .select({
       userId: sessionsTable.userId,
