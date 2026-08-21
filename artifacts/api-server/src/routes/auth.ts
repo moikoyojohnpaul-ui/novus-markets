@@ -99,11 +99,14 @@ router.post("/auth/register", authLimiter, async (req, res): Promise<void> => {
     setAuthCookie(res, token, expiresAt);
     res.status(201).json({ user: safeUser, token });
   } catch (error: any) {
-    res.status(500).json({ error: "Failed to register user" });
+    console.error("Register error:", error);
+    res.status(500).json({
+      error: "Failed to register user",
+      details: error?.message ?? String(error),
+    });
   }
 });
-
-router.post("/auth/login", authLimiter, async (req, res): Promise<void> => {
+router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
